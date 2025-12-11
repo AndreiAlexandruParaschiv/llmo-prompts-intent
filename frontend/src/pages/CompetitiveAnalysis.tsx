@@ -36,15 +36,12 @@ import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 
 function PromptAnalysisCard({ 
-  prompt,
-  onAnalyze,
-  isAnalyzing 
+  prompt
 }: { 
   prompt: HighIntentPrompt
-  onAnalyze: (promptId: string) => void
-  isAnalyzing: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState<{
     competitors: Array<{ url: string; title: string; snippet: string }>
     ai_analysis: CompetitiveAnalysisData | null
@@ -52,6 +49,7 @@ function PromptAnalysisCard({
   } | null>(null)
 
   const handleAnalyze = async () => {
+    setIsAnalyzing(true)
     try {
       const response = await competitiveApi.analyzePrompt(prompt.id)
       setAnalysis({
@@ -62,6 +60,8 @@ function PromptAnalysisCard({
       setExpanded(true)
     } catch (error) {
       console.error('Analysis failed:', error)
+    } finally {
+      setIsAnalyzing(false)
     }
   }
 
@@ -338,7 +338,6 @@ export default function CompetitiveAnalysis() {
   const [page, setPage] = useState(1)
   const [minScore, setMinScore] = useState(searchParams.get('min_score') || '50')
   const [matchStatus, setMatchStatus] = useState(searchParams.get('status') || 'answered')
-  const [analyzingId, setAnalyzingId] = useState<string | null>(null)
   const pageSize = 20
 
   const projectId = searchParams.get('project_id') || selectedProjectId
@@ -570,8 +569,6 @@ export default function CompetitiveAnalysis() {
             <PromptAnalysisCard 
               key={prompt.id} 
               prompt={prompt}
-              onAnalyze={() => {}}
-              isAnalyzing={analyzingId === prompt.id}
             />
           ))}
         </div>
