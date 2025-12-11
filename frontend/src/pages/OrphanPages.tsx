@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -46,19 +46,27 @@ function OrphanPageCard({
   onGenerateSuggestions 
 }: { 
   page: OrphanPage
-  onGenerateSuggestions: (pageId: string) => void 
+  onGenerateSuggestions: (pageId: string) => Promise<void>
 }) {
-  const [expanded, setExpanded] = useState(false)
+  const [expanded, setExpanded] = useState(!!page.ai_suggestion)
   const [isGenerating, setIsGenerating] = useState(false)
 
   const handleGenerateSuggestions = async () => {
     setIsGenerating(true)
     try {
       await onGenerateSuggestions(page.id)
+      setExpanded(true) // Auto-expand after successful generation
     } finally {
       setIsGenerating(false)
     }
   }
+  
+  // Auto-expand when suggestions become available
+  useEffect(() => {
+    if (page.ai_suggestion && !expanded) {
+      setExpanded(true)
+    }
+  }, [page.ai_suggestion])
 
   return (
     <Card className={cn(
@@ -457,7 +465,9 @@ export default function OrphanPages() {
             <OrphanPageCard 
               key={page.id} 
               page={page}
-              onGenerateSuggestions={(pageId) => generateSuggestionsMutation.mutate(pageId)}
+              onGenerateSuggestions={async (pageId) => {
+                await generateSuggestionsMutation.mutateAsync(pageId)
+              }}
             />
           ))}
         </div>

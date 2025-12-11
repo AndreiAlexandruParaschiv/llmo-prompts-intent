@@ -331,19 +331,27 @@ Analyze competitive position and provide actionable recommendations:"""
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are an SEO and content strategist. Given a webpage, generate search queries that users might use to find this content.
+                        "content": """You are an SEO and content strategist. Given a webpage, generate NATURAL search queries that real users would type or speak.
 
-Think about:
-- What questions does this page answer?
-- What problems does it solve?
-- What information does it provide?
-- Who is the target audience?
+IMPORTANT - Generate queries as REAL QUESTIONS that humans ask:
+- Start with: "How", "What", "Where", "When", "Why", "Which", "Can I", "Is it", "Are there", "Do I need"
+- Make them conversational and specific
+- Think about what someone would ask Google, Siri, or ChatGPT
+- Include buying-intent questions for commercial pages (e.g., "What's the best...", "How much does... cost")
 
-Generate realistic search queries that a user would type into Google or an AI assistant.
+BAD examples (too keyword-focused):
+- "Italy cruise packages 2025"
+- "cruise deals Mediterranean"
+
+GOOD examples (natural questions):
+- "What are the best cruise destinations in Italy?"
+- "How much does a Mediterranean cruise cost in 2025?"
+- "Where can I book a cruise from Southampton?"
+- "Is a cruise to Venice worth it?"
 
 Respond with JSON only:
 {
-  "suggested_prompts": ["query 1", "query 2", "query 3", "query 4", "query 5"],
+  "suggested_prompts": ["Natural question 1?", "Natural question 2?", "Natural question 3?", "Natural question 4?", "Natural question 5?"],
   "primary_intent": "transactional|informational|navigational|commercial|comparison",
   "target_audience": "Brief description of who would search for this",
   "content_summary": "One sentence summary of what this page offers",
@@ -352,7 +360,7 @@ Respond with JSON only:
                     },
                     {
                         "role": "user",
-                        "content": f"""Analyze this webpage and suggest search queries it could answer:
+                        "content": f"""Analyze this webpage and suggest NATURAL QUESTION-BASED search queries it could answer:
 
 URL: {page_url}
 Title: {page_title}
@@ -361,7 +369,7 @@ Title: {page_title}
 Content excerpt:
 {content_excerpt}
 
-Generate suggested prompts:"""
+Generate suggested prompts as natural questions:"""
                     }
                 ],
                 temperature=0.4,
