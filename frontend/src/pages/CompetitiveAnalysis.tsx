@@ -338,6 +338,7 @@ export default function CompetitiveAnalysis() {
   const [page, setPage] = useState(1)
   const [minScore, setMinScore] = useState(searchParams.get('min_score') || '50')
   const [matchStatus, setMatchStatus] = useState(searchParams.get('status') || 'answered')
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(searchParams.get('topic') || null)
   const pageSize = 20
 
   const projectId = searchParams.get('project_id') || selectedProjectId
@@ -355,13 +356,14 @@ export default function CompetitiveAnalysis() {
 
   // Get high-intent prompts
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['competitive-prompts', projectId, minScore, matchStatus, page],
+    queryKey: ['competitive-prompts', projectId, minScore, matchStatus, selectedTopic, page],
     queryFn: async () => {
       if (!projectId) return null
       const response = await competitiveApi.getHighIntentPrompts({
         project_id: projectId,
         min_transaction_score: parseInt(minScore) / 100,
         match_status: matchStatus,
+        topic: selectedTopic || undefined,
         page,
         page_size: pageSize,
       })
@@ -370,13 +372,27 @@ export default function CompetitiveAnalysis() {
     enabled: !!projectId,
   })
 
-  const handleFilterChange = (key: string, value: string) => {
-    if (key === 'min_score') setMinScore(value)
-    if (key === 'status') setMatchStatus(value)
+  const handleFilterChange = (key: string, value: string | null) => {
+    if (key === 'min_score') setMinScore(value || '50')
+    if (key === 'status') setMatchStatus(value || 'answered')
+    if (key === 'topic') setSelectedTopic(value)
     setPage(1)
     const params = new URLSearchParams(searchParams)
-    params.set(key, value)
+    if (value) {
+      params.set(key, value)
+    } else {
+      params.delete(key)
+    }
     setSearchParams(params)
+  }
+
+  const handleTopicClick = (topic: string) => {
+    // Toggle topic filter
+    if (selectedTopic === topic) {
+      handleFilterChange('topic', null)
+    } else {
+      handleFilterChange('topic', topic)
+    }
   }
 
   if (!projectId) {
@@ -520,15 +536,38 @@ export default function CompetitiveAnalysis() {
       {summary?.top_topics && summary.top_topics.length > 0 && (
         <Card className="border-slate-200 dark:border-slate-800">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-700 dark:text-slate-300">
-              Top High-Intent Topics
+            <CardTitle className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center justify-between">
+              <span>Top High-Intent Topics</span>
+              {selectedTopic && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleFilterChange('topic', null)}
+                  className="text-xs text-slate-500 hover:text-slate-700"
+                >
+                  Clear filter
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {summary.top_topics.map((topic, idx) => (
-                <Badge key={idx} variant="outline" className="text-sm">
-                  {topic.topic} <span className="ml-1 text-slate-400">({topic.count})</span>
+                <Badge 
+                  key={idx} 
+                  variant={selectedTopic === topic.topic ? "default" : "outline"}
+                  className={cn(
+                    "text-sm cursor-pointer transition-all hover:scale-105",
+                    selectedTopic === topic.topic 
+                      ? "bg-violet-500 text-white hover:bg-violet-600" 
+                      : "hover:bg-slate-100 dark:hover:bg-slate-800"
+                  )}
+                  onClick={() => handleTopicClick(topic.topic)}
+                >
+                  {topic.topic} <span className={cn(
+                    "ml-1",
+                    selectedTopic === topic.topic ? "text-violet-200" : "text-slate-400"
+                  )}>({topic.count})</span>
                 </Badge>
               ))}
             </div>

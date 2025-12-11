@@ -185,6 +185,7 @@ async def get_high_intent_prompts(
     project_id: UUID = Query(...),
     min_transaction_score: float = Query(0.5, description="Minimum transaction score (0-1)"),
     match_status: str = Query("answered", description="Filter by match status: answered, partial, all"),
+    topic: Optional[str] = Query(None, description="Filter by topic"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -199,7 +200,7 @@ async def get_high_intent_prompts(
     import_ids = [row[0] for row in imports_result.fetchall()]
     
     if not import_ids:
-        return {"prompts": [], "total": 0, "page": page, "page_size": page_size}
+        return {"prompts": [], "total": 0, "page": page, "page_size": page_size, "topic": topic}
     
     # Build query for high-intent prompts
     query = (
@@ -209,6 +210,10 @@ async def get_high_intent_prompts(
             Prompt.transaction_score >= min_transaction_score
         )
     )
+    
+    # Filter by topic
+    if topic:
+        query = query.where(Prompt.topic == topic)
     
     # Filter by match status
     if match_status == "answered":

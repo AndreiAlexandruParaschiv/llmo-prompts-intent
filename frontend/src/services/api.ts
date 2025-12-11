@@ -342,6 +342,7 @@ export const competitiveApi = {
     project_id: string
     min_transaction_score?: number
     match_status?: string
+    topic?: string
     page?: number
     page_size?: number
   }) =>
@@ -350,6 +351,7 @@ export const competitiveApi = {
       total: number
       page: number
       page_size: number
+      topic?: string
     }>('/competitive/high-intent-prompts', { params }),
   analyzePrompt: (promptId: string) =>
     api.post<{
