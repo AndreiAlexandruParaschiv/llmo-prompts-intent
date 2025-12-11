@@ -31,7 +31,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { pagesApi, OrphanPage } from '@/services/api'
 import { useProjectStore } from '@/stores/projectStore'
 import { cn } from '@/lib/utils'
-import { toast } from 'sonner'
+import { useToast } from '@/components/ui/use-toast'
 
 const intentColors: Record<string, string> = {
   transactional: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -242,6 +242,7 @@ export default function OrphanPages() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { selectedProjectId } = useProjectStore()
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   
   const [page, setPage] = useState(1)
   const [threshold, setThreshold] = useState(searchParams.get('threshold') || '50')
@@ -268,7 +269,10 @@ export default function OrphanPages() {
   const generateSuggestionsMutation = useMutation({
     mutationFn: (pageId: string) => pagesApi.generateOrphanSuggestions(pageId),
     onSuccess: (response) => {
-      toast.success('Suggestions generated successfully')
+      toast({
+        title: 'Success',
+        description: 'Suggestions generated successfully',
+      })
       // Update the cache with the new suggestion
       queryClient.setQueryData(
         ['orphan-pages', projectId, threshold, page],
@@ -286,7 +290,11 @@ export default function OrphanPages() {
       )
     },
     onError: () => {
-      toast.error('Failed to generate suggestions')
+      toast({
+        title: 'Error',
+        description: 'Failed to generate suggestions',
+        variant: 'destructive',
+      })
     },
   })
 
