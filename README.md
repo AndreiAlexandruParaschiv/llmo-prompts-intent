@@ -21,15 +21,9 @@ cp .env.example .env
 
 ### Step 2: Add Your API Keys (Optional but Recommended)
 
-Edit the `.env` file to add Azure OpenAI credentials for AI-enhanced features:
+Edit the `.env` file to add your Azure OpenAI credentials for AI-enhanced features. See `.env.example` for the template.
 
-```env
-# Azure OpenAI (enables AI intent classification & content suggestions)
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_KEY=your-api-key
-AZURE_API_VERSION=2024-12-01-preview
-AZURE_COMPLETION_DEPLOYMENT=gpt-4o
-```
+> **Note:** The app works without Azure OpenAI using rule-based classification. AI features are optional but recommended for better accuracy.
 
 ### Step 3: Start the Application
 
@@ -150,35 +144,15 @@ Prompt,Topic,Region,Popularity,Sentiment
 
 Create a `.env` file in the root directory:
 
-```env
-# ============================================
-# DATABASE (required)
-# ============================================
-POSTGRES_USER=llmo
-POSTGRES_PASSWORD=llmo_dev_password
-POSTGRES_DB=llmo_prompts
+See `.env.example` for all available options. Key settings:
 
-# ============================================
-# AZURE OPENAI (recommended for AI features)
-# ============================================
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_KEY=your-api-key-here
-AZURE_API_VERSION=2024-12-01-preview
-AZURE_COMPLETION_DEPLOYMENT=gpt-4o
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `AZURE_OPENAI_ENDPOINT` | Your Azure OpenAI endpoint URL | For AI features |
+| `AZURE_OPENAI_KEY` | Your Azure OpenAI API key | For AI features |
+| `AZURE_COMPLETION_DEPLOYMENT` | Deployment name (e.g., `gpt-4o`) | For AI features |
 
-# ============================================
-# MATCHING THRESHOLDS (optional)
-# ============================================
-MATCH_THRESHOLD_ANSWERED=0.75
-MATCH_THRESHOLD_PARTIAL=0.50
-TRANSACTIONAL_THRESHOLD=0.6
-
-# ============================================
-# FEATURE FLAGS (optional)
-# ============================================
-USE_LLM_FOR_INTENT=true
-USE_LLM_FOR_SUGGESTIONS=true
-```
+> **Note:** Database credentials are pre-configured in `docker-compose.yml` for local development. For production, use secure passwords and environment-specific configuration.
 
 ### Without Azure OpenAI
 
