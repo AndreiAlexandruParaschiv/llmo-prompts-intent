@@ -9,6 +9,7 @@ from sqlalchemy import select, func
 import csv
 import io
 import json
+import math
 
 from app.core.database import get_db
 from app.core.logging import get_logger
@@ -21,12 +22,22 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
+def safe_float(value: Optional[float]) -> Optional[float]:
+    """Convert NaN/Inf to None for JSON serialization."""
+    if value is None:
+        return None
+    if math.isnan(value) or math.isinf(value):
+        return None
+    return value
+
+
 @router.get("/", response_model=OpportunityListResponse)
 async def list_opportunities(
     project_id: Optional[UUID] = Query(None),
     status: Optional[str] = Query(None),
     recommended_action: Optional[str] = Query(None),
     min_priority: Optional[float] = Query(None, ge=0, le=1),
+    max_priority: Optional[float] = Query(None, ge=0, le=1),
     max_difficulty: Optional[float] = Query(None, ge=0, le=1),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -59,6 +70,9 @@ async def list_opportunities(
     if min_priority is not None:
         query = query.where(Opportunity.priority_score >= min_priority)
     
+    if max_priority is not None:
+        query = query.where(Opportunity.priority_score <= max_priority)
+    
     if max_difficulty is not None:
         query = query.where(Opportunity.difficulty_score <= max_difficulty)
     
@@ -79,8 +93,8 @@ async def list_opportunities(
         response_opportunities.append(OpportunityResponse(
             id=opp.id,
             prompt_id=opp.prompt_id,
-            priority_score=opp.priority_score,
-            difficulty_score=opp.difficulty_score,
+            priority_score=safe_float(opp.priority_score) or 0.0,
+            difficulty_score=safe_float(opp.difficulty_score),
             difficulty_factors=opp.difficulty_factors or {},
             recommended_action=opp.recommended_action.value if opp.recommended_action else "other",
             reason=opp.reason,
@@ -94,7 +108,9 @@ async def list_opportunities(
             prompt_text=prompt.raw_text,
             prompt_topic=prompt.topic,
             prompt_intent=prompt.intent_label.value if prompt.intent_label else None,
-            prompt_transaction_score=prompt.transaction_score,
+            prompt_transaction_score=safe_float(prompt.transaction_score),
+            prompt_popularity_score=safe_float(prompt.popularity_score),
+            prompt_sentiment_score=safe_float(prompt.sentiment_score),
         ))
     
     # Get stats for filters
@@ -149,8 +165,8 @@ async def get_opportunity(
     return OpportunityResponse(
         id=opp.id,
         prompt_id=opp.prompt_id,
-        priority_score=opp.priority_score,
-        difficulty_score=opp.difficulty_score,
+        priority_score=safe_float(opp.priority_score) or 0.0,
+        difficulty_score=safe_float(opp.difficulty_score),
         difficulty_factors=opp.difficulty_factors or {},
         recommended_action=opp.recommended_action.value if opp.recommended_action else "other",
         reason=opp.reason,
@@ -164,7 +180,9 @@ async def get_opportunity(
         prompt_text=prompt.raw_text,
         prompt_topic=prompt.topic,
         prompt_intent=prompt.intent_label.value if prompt.intent_label else None,
-        prompt_transaction_score=prompt.transaction_score,
+        prompt_transaction_score=safe_float(prompt.transaction_score),
+        prompt_popularity_score=safe_float(prompt.popularity_score),
+        prompt_sentiment_score=safe_float(prompt.sentiment_score),
     )
 
 
@@ -195,8 +213,8 @@ async def update_opportunity(
     return OpportunityResponse(
         id=opp.id,
         prompt_id=opp.prompt_id,
-        priority_score=opp.priority_score,
-        difficulty_score=opp.difficulty_score,
+        priority_score=safe_float(opp.priority_score) or 0.0,
+        difficulty_score=safe_float(opp.difficulty_score),
         difficulty_factors=opp.difficulty_factors or {},
         recommended_action=opp.recommended_action.value if opp.recommended_action else "other",
         reason=opp.reason,
@@ -210,7 +228,9 @@ async def update_opportunity(
         prompt_text=prompt.raw_text if prompt else None,
         prompt_topic=prompt.topic if prompt else None,
         prompt_intent=prompt.intent_label.value if prompt and prompt.intent_label else None,
-        prompt_transaction_score=prompt.transaction_score if prompt else None,
+        prompt_transaction_score=safe_float(prompt.transaction_score) if prompt else None,
+        prompt_popularity_score=safe_float(prompt.popularity_score) if prompt else None,
+        prompt_sentiment_score=safe_float(prompt.sentiment_score) if prompt else None,
     )
 
 
@@ -246,11 +266,21 @@ async def export_opportunities_csv(
     # Header
     writer.writerow([
         "Priority Score", "Prompt", "Topic", "Intent", "Transaction Score",
-        "Recommended Action", "Reason", "Status", "Difficulty Score"
+        "Recommended Action", "Reason", "Status", "Difficulty Score",
+        "AI Suggested Title", "AI Content Type", "AI Outline", "AI Call to Action", "AI Keywords", "AI Priority Reason"
     ])
     
     # Data
     for opp, prompt in rows:
+        # Extract AI suggestion fields
+        suggestion = opp.content_suggestion or {}
+        ai_title = suggestion.get("title", "")
+        ai_content_type = suggestion.get("content_type", "")
+        ai_outline = "; ".join(suggestion.get("outline", [])) if isinstance(suggestion.get("outline"), list) else str(suggestion.get("outline", ""))
+        ai_cta = suggestion.get("cta", "")
+        ai_keywords = "; ".join(suggestion.get("keywords", [])) if isinstance(suggestion.get("keywords"), list) else str(suggestion.get("keywords", ""))
+        ai_priority_reason = suggestion.get("priority_reason", "")
+        
         writer.writerow([
             f"{opp.priority_score:.2f}",
             prompt.raw_text,
@@ -261,6 +291,12 @@ async def export_opportunities_csv(
             opp.reason or "",
             opp.status.value if opp.status else "",
             f"{opp.difficulty_score:.2f}" if opp.difficulty_score else "",
+            ai_title,
+            ai_content_type,
+            ai_outline,
+            ai_cta,
+            ai_keywords,
+            ai_priority_reason,
         ])
     
     output.seek(0)
@@ -323,3 +359,55 @@ async def export_opportunities_json(
         media_type="application/json",
         headers={"Content-Disposition": "attachment; filename=opportunities.json"}
     )
+
+
+@router.post("/{project_id}/regenerate-suggestions/")
+async def regenerate_content_suggestions(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Regenerate AI content suggestions for all opportunities in a project.
+    Useful when Azure OpenAI is newly configured or suggestions are missing.
+    """
+    from app.workers.matcher_tasks import regenerate_content_suggestions as regenerate_task
+    
+    # Verify project exists
+    from app.models.project import Project
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get opportunity count for this project
+    from app.models.opportunity import Opportunity
+    
+    csv_imports_result = await db.execute(
+        select(CSVImport.id).where(CSVImport.project_id == project_id)
+    )
+    import_ids = [row[0] for row in csv_imports_result]
+    
+    opp_count = 0
+    if import_ids:
+        from app.models.prompt import Prompt
+        prompt_ids_result = await db.execute(
+            select(Prompt.id).where(Prompt.csv_import_id.in_(import_ids))
+        )
+        prompt_ids = [row[0] for row in prompt_ids_result]
+        if prompt_ids:
+            opp_count_result = await db.execute(
+                select(func.count()).select_from(Opportunity).where(Opportunity.prompt_id.in_(prompt_ids))
+            )
+            opp_count = opp_count_result.scalar() or 0
+    
+    # Trigger the regeneration task
+    task = regenerate_task.delay(str(project_id))
+    
+    logger.info("Started content suggestion regeneration", project_id=str(project_id), task_id=task.id)
+    
+    return {
+        "status": "started",
+        "message": "Content suggestion regeneration started",
+        "task_id": task.id,
+        "project_id": str(project_id),
+        "opportunity_count": opp_count,
+    }

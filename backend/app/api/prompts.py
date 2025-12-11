@@ -181,17 +181,22 @@ async def get_prompt(
             .order_by(Match.similarity_score.desc())
         )
         
-        response.matches = [
-            PromptMatchInfo(
-                page_id=match.page_id,
-                page_url=page.url,
-                page_title=page.title,
-                similarity_score=match.similarity_score,
-                match_type=match.match_type.value if match.match_type else "semantic",
-                matched_snippet=match.matched_snippet,
-            )
-            for match, page in matches_result
-        ]
+        # Deduplicate by URL - keep highest scoring match for each URL
+        seen_urls = set()
+        deduplicated_matches = []
+        for match, page in matches_result:
+            if page.url not in seen_urls:
+                seen_urls.add(page.url)
+                deduplicated_matches.append(PromptMatchInfo(
+                    page_id=match.page_id,
+                    page_url=page.url,
+                    page_title=page.title,
+                    similarity_score=match.similarity_score,
+                    match_type=match.match_type.value if match.match_type else "semantic",
+                    matched_snippet=match.matched_snippet,
+                ))
+        
+        response.matches = deduplicated_matches
         
         # Get opportunity
         opportunity = await db.execute(
@@ -297,19 +302,63 @@ async def reclassify_all_prompts(
     }
 
 
+@router.post("/reclassify-with-ai/")
+async def reclassify_prompts_with_ai(
+    project_id: UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-run intent classification using Azure OpenAI for all prompts in a project.
+    This is more accurate than rule-based classification and correctly distinguishes
+    transactional (ready to buy) from commercial (researching before purchase).
+    """
+    from app.workers.csv_tasks import reclassify_prompts_with_ai as reclassify_task
+    from app.models.project import Project
+    
+    # Verify project exists
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get prompt count
+    csv_imports = await db.execute(
+        select(CSVImport.id).where(CSVImport.project_id == project_id)
+    )
+    import_ids = [row[0] for row in csv_imports]
+    
+    count_query = select(func.count()).select_from(Prompt).where(
+        Prompt.csv_import_id.in_(import_ids)
+    )
+    prompt_count = await db.scalar(count_query)
+    
+    # Trigger the reclassification task
+    task = reclassify_task.delay(str(project_id))
+    
+    logger.info("Started AI reclassification", project_id=str(project_id), task_id=task.id)
+    
+    return {
+        "status": "started",
+        "message": f"AI reclassification started for {prompt_count} prompts",
+        "task_id": task.id,
+        "project_id": str(project_id),
+        "prompt_count": prompt_count,
+    }
+
+
 @router.get("/{prompt_id}/explain-intent")
 async def explain_intent(
     prompt_id: UUID,
     db: AsyncSession = Depends(get_db),
 ):
-    """Get explanation of why this intent was classified."""
+    """Get explanation of why this intent was classified using LLM when available."""
     from app.services.intent_classifier import intent_classifier
+    from app.services.azure_openai import azure_openai_service
     
     prompt = await db.get(Prompt, prompt_id)
     if not prompt:
         raise HTTPException(status_code=404, detail="Prompt not found")
     
-    # Run classification to get signals
+    # Run rule-based classification to get signals
     result = intent_classifier.classify(prompt.raw_text)
     
     # Clean up signals for display
@@ -317,7 +366,6 @@ async def explain_intent(
     for s in result.signals:
         if s.startswith("Matched:"):
             pattern = s.replace("Matched: ", "")
-            # Clean up regex to readable text
             readable = pattern.replace("\\b", "").replace("\\s+", " ").replace("\\s*", " ")
             readable = readable.replace("(", "").replace(")", "").replace("?", "")
             readable = readable.strip()
@@ -326,13 +374,41 @@ async def explain_intent(
         else:
             clean_signals.append(s)
     
+    # Try to get LLM-enhanced explanation
+    llm_explanation = None
+    llm_analysis = None
+    classification_method = "rule-based"
+    
+    if azure_openai_service.enabled:
+        try:
+            llm_result = azure_openai_service.classify_intent(prompt.raw_text)
+            if llm_result:
+                classification_method = "ai-enhanced"
+                llm_analysis = {
+                    "intent": llm_result.get("intent", result.intent.value),
+                    "confidence": llm_result.get("confidence", result.confidence),
+                    "transaction_score": llm_result.get("transaction_score", result.transaction_score),
+                    "reasoning": llm_result.get("reasoning", ""),
+                }
+                llm_explanation = llm_result.get("reasoning", "")
+        except Exception as e:
+            logger.warning(f"LLM intent explanation failed: {e}")
+    
+    # Generate explanation (prefer LLM if available)
+    if llm_explanation:
+        explanation = llm_explanation
+    else:
+        explanation = _generate_intent_explanation(result.intent.value, result.signals, result.transaction_score)
+    
     return {
         "prompt_text": prompt.raw_text,
-        "intent": result.intent.value,
-        "transaction_score": result.transaction_score,
-        "confidence": result.confidence,
+        "intent": llm_analysis["intent"] if llm_analysis else result.intent.value,
+        "transaction_score": llm_analysis["transaction_score"] if llm_analysis else result.transaction_score,
+        "confidence": llm_analysis["confidence"] if llm_analysis else result.confidence,
         "signals": clean_signals,
-        "explanation": _generate_intent_explanation(result.intent.value, result.signals, result.transaction_score),
+        "explanation": explanation,
+        "classification_method": classification_method,
+        "llm_analysis": llm_analysis,
     }
 
 

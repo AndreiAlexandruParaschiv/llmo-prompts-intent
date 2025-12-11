@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.azure_openai import azure_openai_service
 from app.models.prompt import Prompt, MatchStatus
 from app.models.page import Page
 from app.models.match import Match, MatchType
@@ -20,6 +21,35 @@ logger = get_logger(__name__)
 # Create sync engine for Celery workers
 sync_engine = create_engine(settings.DATABASE_URL.replace("+asyncpg", ""))
 SessionLocal = sessionmaker(bind=sync_engine)
+
+
+def _generate_content_suggestion(prompt, match_status: str, matches=None) -> dict:
+    """Generate LLM content suggestion for an opportunity."""
+    content_suggestion = {}
+    
+    if not settings.USE_LLM_FOR_SUGGESTIONS:
+        return content_suggestion
+    
+    try:
+        if azure_openai_service.enabled:
+            # Get existing content snippets for context
+            snippets = []
+            if matches:
+                snippets = [m.matched_snippet for m in matches if hasattr(m, 'matched_snippet') and m.matched_snippet][:3]
+            
+            llm_suggestion = azure_openai_service.generate_content_suggestion(
+                prompt_text=prompt.raw_text,
+                intent=prompt.intent_label.value if prompt.intent_label else "informational",
+                match_status=match_status,
+                existing_content_snippets=snippets if snippets else None
+            )
+            if llm_suggestion:
+                content_suggestion = llm_suggestion
+                logger.info(f"Generated LLM suggestion for prompt", prompt_id=str(prompt.id))
+    except Exception as e:
+        logger.warning(f"LLM content suggestion failed: {e}")
+    
+    return content_suggestion
 
 
 @celery_app.task(bind=True, name="match_prompts_to_pages")
@@ -137,6 +167,13 @@ def match_prompts_to_pages(self, project_id: str, prompt_ids: List[str] = None):
                         has_related_pages=bool(matches),
                     )
                     
+                    # Try to get LLM-generated content suggestion
+                    content_suggestion = _generate_content_suggestion(
+                        prompt=prompt,
+                        match_status=prompt.match_status.value,
+                        matches=matches
+                    )
+                    
                     opportunity = Opportunity(
                         prompt_id=prompt.id,
                         priority_score=opp_data.priority_score,
@@ -146,6 +183,7 @@ def match_prompts_to_pages(self, project_id: str, prompt_ids: List[str] = None):
                         reason=opp_data.reason,
                         status=OpportunityStatus.NEW,
                         related_page_ids=[str(m.page_id) for m in matches[:3]],
+                        content_suggestion=content_suggestion,
                     )
                     db.add(opportunity)
                     opportunity_count += 1
@@ -187,7 +225,7 @@ def match_prompts_to_pages(self, project_id: str, prompt_ids: List[str] = None):
 @celery_app.task(name="regenerate_opportunities")
 def regenerate_opportunities(project_id: str):
     """
-    Regenerate all opportunities for a project.
+    Regenerate all opportunities for a project with LLM suggestions.
     """
     logger.info("Regenerating opportunities", project_id=project_id)
     
@@ -230,6 +268,13 @@ def regenerate_opportunities(project_id: str):
                 has_related_pages=bool(matches),
             )
             
+            # Generate LLM content suggestion
+            content_suggestion = _generate_content_suggestion(
+                prompt=prompt,
+                match_status=prompt.match_status.value,
+                matches=matches
+            )
+            
             opportunity = Opportunity(
                 prompt_id=prompt.id,
                 priority_score=opp_data.priority_score,
@@ -239,6 +284,7 @@ def regenerate_opportunities(project_id: str):
                 reason=opp_data.reason,
                 status=OpportunityStatus.NEW,
                 related_page_ids=[str(m.page_id) for m in matches[:3]],
+                content_suggestion=content_suggestion,
             )
             db.add(opportunity)
             opportunity_count += 1
@@ -248,6 +294,89 @@ def regenerate_opportunities(project_id: str):
         return {
             "status": "completed",
             "opportunities": opportunity_count,
+        }
+        
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="regenerate_content_suggestions")
+def regenerate_content_suggestions(self, project_id: str):
+    """
+    Regenerate LLM content suggestions for existing opportunities.
+    Useful when Azure OpenAI is newly configured or suggestions are missing.
+    """
+    logger.info("Regenerating content suggestions", project_id=project_id)
+    
+    db = SessionLocal()
+    
+    try:
+        from app.models.csv_import import CSVImport
+        
+        # Get CSV imports for this project
+        csv_imports = db.query(CSVImport).filter(
+            CSVImport.project_id == UUID(project_id)
+        ).all()
+        
+        import_ids = [ci.id for ci in csv_imports]
+        
+        # Get prompts for these imports
+        prompt_ids = [p.id for p in db.query(Prompt).filter(
+            Prompt.csv_import_id.in_(import_ids)
+        ).all()]
+        
+        # Get opportunities without content suggestions or with empty ones
+        opportunities = db.query(Opportunity).filter(
+            Opportunity.prompt_id.in_(prompt_ids),
+        ).all()
+        
+        updated_count = 0
+        total = len(opportunities)
+        
+        for i, opportunity in enumerate(opportunities):
+            # Get the prompt
+            prompt = db.query(Prompt).filter(Prompt.id == opportunity.prompt_id).first()
+            if not prompt:
+                continue
+            
+            # Update state with current item being processed
+            prompt_text = prompt.raw_text[:80] + "..." if len(prompt.raw_text) > 80 else prompt.raw_text
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "processed": i + 1,
+                    "total": total,
+                    "updated": updated_count,
+                    "current_item": prompt_text,
+                }
+            )
+            
+            # Get matches for context
+            matches = db.query(Match).filter(Match.prompt_id == prompt.id).all()
+            
+            # Generate LLM content suggestion (always regenerate)
+            content_suggestion = _generate_content_suggestion(
+                prompt=prompt,
+                match_status=prompt.match_status.value if prompt.match_status else "partial",
+                matches=matches
+            )
+            
+            if content_suggestion:
+                opportunity.content_suggestion = content_suggestion
+                updated_count += 1
+            
+            # Commit every 5 opportunities
+            if i % 5 == 0:
+                db.commit()
+        
+        db.commit()
+        
+        logger.info(f"Regenerated content suggestions: {updated_count}/{total}")
+        
+        return {
+            "status": "completed",
+            "total": total,
+            "updated": updated_count,
         }
         
     finally:

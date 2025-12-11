@@ -44,6 +44,13 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - DEBUG=true
+      # Azure OpenAI Configuration
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY:-}
+      - AZURE_API_VERSION=${AZURE_API_VERSION:-2024-12-01-preview}
+      - AZURE_COMPLETION_DEPLOYMENT=${AZURE_COMPLETION_DEPLOYMENT:-gpt-4o}
+      - USE_LLM_FOR_INTENT=${USE_LLM_FOR_INTENT:-true}
+      - USE_LLM_FOR_SUGGESTIONS=${USE_LLM_FOR_SUGGESTIONS:-true}
     ports:
       - "8000:8000"
     volumes:
@@ -73,6 +80,13 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      # Azure OpenAI Configuration
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY:-}
+      - AZURE_API_VERSION=${AZURE_API_VERSION:-2024-12-01-preview}
+      - AZURE_COMPLETION_DEPLOYMENT=${AZURE_COMPLETION_DEPLOYMENT:-gpt-4o}
+      - USE_LLM_FOR_INTENT=${USE_LLM_FOR_INTENT:-true}
+      - USE_LLM_FOR_SUGGESTIONS=${USE_LLM_FOR_SUGGESTIONS:-true}
     volumes:
       - ./backend:/app
       - uploads_data:/app/uploads

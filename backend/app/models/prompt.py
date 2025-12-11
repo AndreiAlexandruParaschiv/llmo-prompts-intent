@@ -65,7 +65,7 @@ class Prompt(Base, UUIDMixin, TimestampMixin):
     
     # Intent classification
     intent_label = Column(
-        Enum(IntentLabel),
+        Enum(IntentLabel, values_callable=lambda x: [e.value for e in x]),
         default=IntentLabel.INFORMATIONAL,
         nullable=False,
     )

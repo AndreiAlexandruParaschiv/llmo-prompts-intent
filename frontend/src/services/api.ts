@@ -81,6 +81,15 @@ export interface Page {
   created_at: string
 }
 
+export interface ContentSuggestion {
+  title?: string
+  content_type?: string
+  outline?: string[]
+  cta_suggestion?: string
+  seo_keywords?: string[]
+  priority_reason?: string
+}
+
 export interface Opportunity {
   id: string
   prompt_id: string
@@ -92,13 +101,15 @@ export interface Opportunity {
   status: string
   assigned_to: string | null
   notes: string | null
-  content_suggestion: Record<string, unknown>
+  content_suggestion: ContentSuggestion
   related_page_ids: string[]
   created_at: string
   prompt_text?: string
   prompt_topic?: string
   prompt_intent?: string
   prompt_transaction_score?: number
+  prompt_popularity_score?: number
+  prompt_sentiment_score?: number
 }
 
 export interface ProjectStats {
@@ -159,6 +170,7 @@ export const promptsApi = {
     language?: string
     intent_label?: string
     match_status?: string
+    min_transaction_score?: number
     search?: string
     page?: number
     page_size?: number
@@ -174,6 +186,8 @@ export const promptsApi = {
     }),
   explainIntent: (id: string) => api.get<IntentExplanation>(`/prompts/${id}/explain-intent`),
   reclassify: (id: string) => api.post(`/prompts/${id}/reclassify/`),
+  reclassifyWithAI: (projectId: string) => 
+    api.post(`/prompts/reclassify-with-ai/`, null, { params: { project_id: projectId } }),
 }
 
 // Pages
@@ -209,6 +223,7 @@ export const opportunitiesApi = {
     status?: string
     recommended_action?: string
     min_priority?: number
+    max_priority?: number
     page?: number
     page_size?: number
   }) =>
@@ -222,9 +237,11 @@ export const opportunitiesApi = {
   update: (id: string, data: { status?: string; notes?: string }) =>
     api.patch<Opportunity>(`/opportunities/${id}`, data),
   exportCsv: (projectId: string) =>
-    api.get(`/opportunities/export/csv/`, { params: { project_id: projectId }, responseType: 'blob' }),
+    api.get(`/opportunities/export/csv`, { params: { project_id: projectId }, responseType: 'blob' }),
   exportJson: (projectId: string) =>
-    api.get(`/opportunities/export/json/`, { params: { project_id: projectId }, responseType: 'blob' }),
+    api.get(`/opportunities/export/json`, { params: { project_id: projectId }, responseType: 'blob' }),
+  regenerateSuggestions: (projectId: string) =>
+    api.post(`/opportunities/${projectId}/regenerate-suggestions/`),
 }
 
 // Jobs

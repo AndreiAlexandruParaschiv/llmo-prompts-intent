@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   MessageSquareText,
@@ -13,6 +13,7 @@ import {
   Clock,
   TrendingUp,
   Sparkles,
+  Zap,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -27,6 +28,7 @@ import {
 } from '@/components/ui/select'
 import { promptsApi, projectsApi, Prompt } from '@/services/api'
 import { useProjectStore } from '@/stores/projectStore'
+import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
 
 const intentColors: Record<string, string> = {
@@ -98,11 +100,20 @@ function PromptCard({ prompt }: { prompt: Prompt }) {
                   {prompt.intent_label}
                 </Badge>
 
-                {/* Transaction score */}
+                {/* Transaction score - buying intent indicator */}
                 {prompt.transaction_score > 0 && (
-                  <Badge variant="outline" className="text-xs">
+                  <Badge 
+                    variant="outline" 
+                    className={cn(
+                      "text-xs",
+                      prompt.transaction_score >= 0.6 
+                        ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-700" 
+                        : ""
+                    )}
+                  >
                     <TrendingUp className="w-3 h-3 mr-1" />
-                    {Math.round(prompt.transaction_score * 100)}%
+                    {prompt.transaction_score >= 0.6 ? '🛒 ' : ''}
+                    {Math.round(prompt.transaction_score * 100)}% buying intent
                   </Badge>
                 )}
 
@@ -150,12 +161,80 @@ function PromptCard({ prompt }: { prompt: Prompt }) {
 export default function Prompts() {
   const { selectedProjectId } = useProjectStore()
   const [searchParams, setSearchParams] = useSearchParams()
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
 
   const [search, setSearch] = useState(searchParams.get('search') || '')
   const [intent, setIntent] = useState(searchParams.get('intent_label') || 'all')
   const [matchStatus, setMatchStatus] = useState(searchParams.get('match_status') || 'all')
   const [language, setLanguage] = useState(searchParams.get('language') || 'all')
   const [page, setPage] = useState(1)
+
+  // AI Reclassification state
+  const [reclassifyTaskId, setReclassifyTaskId] = useState<string | null>(null)
+  const [reclassifyProgress, setReclassifyProgress] = useState<{
+    processed: number
+    total: number
+    changed: number
+    current_item?: string
+  } | null>(null)
+
+  // Poll for task progress
+  const { data: taskStatus } = useQuery({
+    queryKey: ['task-status', reclassifyTaskId],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${reclassifyTaskId}`)
+      return response.json()
+    },
+    enabled: !!reclassifyTaskId,
+    refetchInterval: 1000,
+  })
+
+  // Update progress when task status changes - use useEffect to avoid state updates during render
+  useEffect(() => {
+    if (!taskStatus || !reclassifyTaskId) return
+
+    if (taskStatus.state === 'PROGRESS' && taskStatus.meta) {
+      setReclassifyProgress(taskStatus.meta)
+    } else if (taskStatus.state === 'SUCCESS' || taskStatus.ready) {
+      setReclassifyTaskId(null)
+      setReclassifyProgress(null)
+      queryClient.invalidateQueries({ queryKey: ['prompts'] })
+      queryClient.invalidateQueries({ queryKey: ['project-stats'] })
+      toast({
+        title: 'AI Reclassification Complete',
+        description: `${taskStatus.result?.processed || 0} prompts processed, ${taskStatus.result?.changed || 0} updated.`,
+      })
+    } else if (taskStatus.state === 'FAILURE') {
+      setReclassifyTaskId(null)
+      setReclassifyProgress(null)
+      toast({
+        title: 'AI Reclassification Failed',
+        description: 'An error occurred while reclassifying prompts.',
+        variant: 'destructive',
+      })
+    }
+  }, [taskStatus, reclassifyTaskId, queryClient, toast])
+
+  // AI Reclassification mutation
+  const reclassifyMutation = useMutation({
+    mutationFn: () => promptsApi.reclassifyWithAI(selectedProjectId!),
+    onSuccess: (response) => {
+      setReclassifyTaskId(response.data.task_id)
+      setReclassifyProgress({ processed: 0, total: response.data.prompt_count, changed: 0 })
+      toast({
+        title: 'AI Reclassification Started',
+        description: `Analyzing ${response.data.prompt_count} prompts with Azure OpenAI...`,
+      })
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Reclassification failed',
+        description: error.message,
+        variant: 'destructive',
+      })
+    },
+  })
 
   // Fetch prompts
   const { data, isLoading } = useQuery({
@@ -171,7 +250,8 @@ export default function Prompts() {
       project_id: selectedProjectId || undefined,
       search: search || undefined,
       intent_label: intent !== 'all' ? intent : undefined,
-      match_status: matchStatus !== 'all' ? matchStatus : undefined,
+      match_status: matchStatus !== 'all' && matchStatus !== 'buying_intent' ? matchStatus : undefined,
+      min_transaction_score: matchStatus === 'buying_intent' ? 0.6 : undefined,
       language: language !== 'all' ? language : undefined,
       page,
       page_size: 20,
@@ -216,7 +296,50 @@ export default function Prompts() {
             {total} prompts {selectedProjectId ? 'in this project' : 'across all projects'}
           </p>
         </div>
+        {selectedProjectId && (
+          <Button
+            variant="outline"
+            onClick={() => reclassifyMutation.mutate()}
+            disabled={reclassifyMutation.isPending || !!reclassifyTaskId}
+            className="bg-gradient-to-r from-violet-50 to-purple-50 hover:from-violet-100 hover:to-purple-100 border-violet-200 dark:from-violet-900/20 dark:to-purple-900/20 dark:border-violet-800"
+          >
+            <Zap className="w-4 h-4 mr-2 text-violet-500" />
+            {reclassifyTaskId ? 'Reclassifying...' : 'Reclassify with AI'}
+          </Button>
+        )}
       </div>
+
+      {/* AI Reclassification Progress */}
+      {(reclassifyProgress || reclassifyTaskId) && (
+        <Card className="border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
+                <Zap className="w-5 h-5 text-violet-500 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-violet-700 dark:text-violet-300">
+                    AI Reclassification in Progress
+                  </span>
+                </div>
+                {/* Animated indeterminate progress bar */}
+                <div className="w-full bg-violet-200 dark:bg-violet-800 rounded-full h-2 mb-2 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-violet-400 via-violet-500 to-violet-400 rounded-full"
+                    style={{ 
+                      width: '40%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-violet-600 dark:text-violet-400">
+                  Analyzing prompts with Azure OpenAI GPT-4o...
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card className="border-slate-200 dark:border-slate-800">
@@ -291,12 +414,13 @@ export default function Prompts() {
       </Card>
 
       {/* Stats Summary */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         {[
           { label: 'Total', count: total, color: 'bg-slate-500', filter: 'all' },
           { label: 'Answered', count: stats?.by_match_status?.answered || 0, color: 'bg-emerald-500', filter: 'answered' },
           { label: 'Partial', count: stats?.by_match_status?.partial || 0, color: 'bg-amber-500', filter: 'partial' },
           { label: 'Gaps', count: stats?.by_match_status?.gap || 0, color: 'bg-red-500', filter: 'gap' },
+          { label: 'Buying Intent', count: stats?.high_transaction_count || 0, color: 'bg-emerald-600', filter: 'buying_intent', icon: TrendingUp },
         ].map(stat => (
           <Card 
             key={stat.label} 
@@ -308,7 +432,11 @@ export default function Prompts() {
           >
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className={cn("w-3 h-3 rounded-full", stat.color)} />
+                {stat.icon ? (
+                  <stat.icon className={cn("w-5 h-5", stat.color.replace('bg-', 'text-'))} />
+                ) : (
+                  <div className={cn("w-3 h-3 rounded-full", stat.color)} />
+                )}
                 <div>
                   <p className="text-2xl font-bold text-slate-900 dark:text-white">{stat.count}</p>
                   <p className="text-xs text-slate-500">{stat.label}</p>

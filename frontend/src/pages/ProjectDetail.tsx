@@ -689,14 +689,6 @@ export default function ProjectDetail() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link to={`/projects/${project.id}/import`}>
-              <Upload className="w-4 h-4 mr-2" />
-              Import
-            </Link>
-          </Button>
-        </div>
       </div>
 
       {/* Tabs */}

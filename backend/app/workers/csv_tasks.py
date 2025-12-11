@@ -104,9 +104,14 @@ def process_csv_import(self, import_id: str):
                     lang, lang_confidence = language_detector.detect(row_data["raw_text"])
                     prompt.language = lang
                     
-                    # Classify intent
-                    intent_result = intent_classifier.classify(row_data["raw_text"])
-                    prompt.intent_label = IntentLabel(intent_result.intent.value)
+                    # Classify intent (use LLM when available for better accuracy)
+                    intent_result = intent_classifier.classify_with_llm(row_data["raw_text"])
+                    # Normalize intent to lowercase for database enum compatibility
+                    intent_value = intent_result.intent.value.lower()
+                    try:
+                        prompt.intent_label = IntentLabel(intent_value)
+                    except ValueError:
+                        prompt.intent_label = IntentLabel.INFORMATIONAL
                     prompt.transaction_score = intent_result.transaction_score
                     
                     # Track if this is a new prompt or update
@@ -221,6 +226,95 @@ def reprocess_prompts_nlp(import_id: str):
         
         return {"status": "completed", "processed": len(prompts)}
         
+    finally:
+        db.close()
+
+
+@celery_app.task(bind=True, name="reclassify_prompts_with_ai")
+def reclassify_prompts_with_ai(self, project_id: str):
+    """
+    Reclassify all prompts in a project using Azure OpenAI.
+    This provides more accurate intent classification, especially for
+    distinguishing transactional (ready to buy) from commercial (researching).
+    """
+    from app.models.csv_import import CSVImport
+    
+    logger.info("Starting AI reclassification", project_id=project_id)
+    
+    db = get_db_session()
+    
+    try:
+        # Get all prompts for this project
+        csv_imports = db.query(CSVImport).filter(
+            CSVImport.project_id == UUID(project_id)
+        ).all()
+        
+        import_ids = [ci.id for ci in csv_imports]
+        
+        prompts = db.query(Prompt).filter(
+            Prompt.csv_import_id.in_(import_ids)
+        ).all()
+        
+        total = len(prompts)
+        processed = 0
+        changed = 0
+        
+        for prompt in prompts:
+            old_intent = prompt.intent_label.value if prompt.intent_label else None
+            old_score = prompt.transaction_score
+            
+            # Update state with current prompt being processed
+            self.update_state(
+                state="PROGRESS",
+                meta={
+                    "processed": processed,
+                    "total": total,
+                    "changed": changed,
+                    "current_item": prompt.raw_text[:80] + "..." if len(prompt.raw_text) > 80 else prompt.raw_text,
+                    "current_intent": old_intent,
+                }
+            )
+            
+            # Use LLM classification
+            intent_result = intent_classifier.classify_with_llm(prompt.raw_text)
+            # Normalize intent to lowercase for database enum compatibility
+            intent_value = intent_result.intent.value.lower()
+            try:
+                prompt.intent_label = IntentLabel(intent_value)
+            except ValueError:
+                # Fallback to informational if intent not found
+                prompt.intent_label = IntentLabel.INFORMATIONAL
+            prompt.transaction_score = intent_result.transaction_score
+            
+            # Track changes
+            if old_intent != intent_result.intent.value or abs((old_score or 0) - intent_result.transaction_score) > 0.1:
+                changed += 1
+            
+            processed += 1
+            
+            # Commit every 10 prompts
+            if processed % 10 == 0:
+                db.commit()
+        
+        db.commit()
+        
+        logger.info(
+            "AI reclassification completed",
+            project_id=project_id,
+            processed=processed,
+            changed=changed,
+        )
+        
+        return {
+            "status": "completed",
+            "processed": processed,
+            "changed": changed,
+        }
+        
+    except Exception as e:
+        logger.error("AI reclassification failed", error=str(e))
+        raise
+    
     finally:
         db.close()
 

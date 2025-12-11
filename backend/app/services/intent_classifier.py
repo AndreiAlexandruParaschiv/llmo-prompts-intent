@@ -60,9 +60,20 @@ TRANSACTIONAL_PATTERNS = [
     (r"\bhow\s+much\b", 0.5),
     (r"\bcheap(est)?\b", 0.6),
     (r"\bdiscount\b", 0.7),
-    (r"\bdeal\b", 0.6),
+    (r"\bdeal(s)?\b", 0.6),
     (r"\bpromo\s*code\b", 0.8),
     (r"\bcoupon\b", 0.8),
+    (r"\bsale\b", 0.7),
+    (r"\boffer(s)?\b", 0.5),
+    
+    # Sales events - high buying intent
+    (r"\bblack\s*friday\b", 0.85),
+    (r"\bcyber\s*monday\b", 0.85),
+    (r"\bprime\s*day\b", 0.8),
+    (r"\bholiday\s+sale\b", 0.8),
+    (r"\bflash\s+sale\b", 0.8),
+    (r"\bclearance\b", 0.7),
+    (r"\blimited\s+(time\s+)?offer\b", 0.7),
     
     # Action-oriented
     (r"\bget\s+(a|the)?\s*quote\b", 0.7),
@@ -470,6 +481,49 @@ class IntentClassifierService:
         """Get just the transaction score."""
         result = self.classify(text)
         return result.transaction_score
+    
+    def classify_with_llm(self, text: str) -> IntentResult:
+        """
+        Classify using Azure OpenAI for better accuracy.
+        Falls back to rule-based if LLM unavailable.
+        """
+        from app.services.azure_openai import azure_openai_service
+        
+        # First, get rule-based classification
+        rule_result = self.classify(text)
+        
+        # If LLM is not enabled, use rule-based
+        if not settings.USE_LLM_FOR_INTENT or not azure_openai_service.enabled:
+            return rule_result
+        
+        # Use LLM for better accuracy
+        try:
+            llm_result = azure_openai_service.classify_intent(text)
+            
+            if llm_result:
+                intent_str = llm_result.get("intent", "informational").lower()
+                
+                # Map LLM response to our enum
+                try:
+                    intent_type = IntentType(intent_str)
+                except ValueError:
+                    # Handle case variations
+                    intent_type = IntentType.INFORMATIONAL
+                    for it in IntentType:
+                        if it.value.lower() == intent_str.lower():
+                            intent_type = it
+                            break
+                
+                return IntentResult(
+                    intent=intent_type,
+                    transaction_score=llm_result.get("transaction_score", rule_result.transaction_score),
+                    confidence=llm_result.get("confidence", 0.85),
+                    signals=rule_result.signals + [f"AI: {llm_result.get('reasoning', 'AI classification')}"]
+                )
+        except Exception as e:
+            logger.warning(f"LLM classification failed, using rule-based: {e}")
+        
+        return rule_result
 
 
 # Singleton instance

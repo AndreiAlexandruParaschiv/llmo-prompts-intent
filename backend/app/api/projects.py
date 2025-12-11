@@ -362,6 +362,14 @@ async def get_project_stats(
         .where(Opportunity.priority_score >= 0.7)
     )
     
+    # High transaction/buying intent prompts (transaction_score >= 0.6)
+    high_transaction_count = await db.scalar(
+        select(func.count())
+        .select_from(Prompt)
+        .where(Prompt.csv_import_id.in_(import_ids))
+        .where(Prompt.transaction_score >= 0.6)
+    )
+    
     return {
         "total_prompts": total_prompts or 0,
         "total_pages": total_pages or 0,
@@ -371,4 +379,5 @@ async def get_project_stats(
         "opportunities_by_status": opportunities_by_status,
         "opportunities_by_action": opportunities_by_action,
         "high_priority_count": high_priority_count or 0,
+        "high_transaction_count": high_transaction_count or 0,
     }

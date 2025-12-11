@@ -43,9 +43,20 @@ class Settings(BaseSettings):
     MATCH_THRESHOLD_ANSWERED: float = 0.75
     MATCH_THRESHOLD_PARTIAL: float = 0.50
     
-    # OpenAI (optional)
+    # OpenAI (optional - standard OpenAI)
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4-turbo-preview"
+    
+    # Azure OpenAI (optional - Azure-hosted OpenAI)
+    AZURE_OPENAI_ENDPOINT: Optional[str] = None
+    AZURE_OPENAI_KEY: Optional[str] = None
+    AZURE_API_VERSION: str = "2024-12-01-preview"
+    AZURE_COMPLETION_DEPLOYMENT: str = "gpt-4o"
+    AZURE_EMBEDDING_DEPLOYMENT: Optional[str] = None  # Optional: for Azure embeddings
+    
+    # LLM Enhancement settings
+    USE_LLM_FOR_INTENT: bool = True  # Use LLM for edge case intent classification
+    USE_LLM_FOR_SUGGESTIONS: bool = True  # Use LLM for content suggestions
     
     # Crawler settings
     CRAWLER_MAX_PAGES: int = 100

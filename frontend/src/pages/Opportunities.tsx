@@ -39,6 +39,7 @@ import {
 import { opportunitiesApi, pagesApi, Opportunity } from '@/services/api'
 import { useProjectStore } from '@/stores/projectStore'
 import { useToast } from '@/components/ui/use-toast'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 const statusConfig = {
@@ -135,20 +136,53 @@ function OpportunityCard({
     )}>
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
-          {/* Priority indicator */}
-          <div className="flex flex-col items-center gap-1">
-            <div className={cn(
-              "w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold",
-              priorityPercent >= 70 ? "bg-red-100 dark:bg-red-900/30 text-red-500" :
-              priorityPercent >= 40 ? "bg-amber-100 dark:bg-amber-900/30 text-amber-500" :
-              "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-500"
-            )}>
-              {priorityPercent}
-            </div>
-            <span className={cn("text-[10px] font-medium", priorityColor)}>
-              {priorityLevel}
-            </span>
-          </div>
+          {/* Priority indicator with tooltip */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex flex-col items-center gap-1 cursor-help">
+                  <div className={cn(
+                    "w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold",
+                    priorityPercent >= 70 ? "bg-red-100 dark:bg-red-900/30 text-red-500" :
+                    priorityPercent >= 40 ? "bg-amber-100 dark:bg-amber-900/30 text-amber-500" :
+                    "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-500"
+                  )}>
+                    {priorityPercent}
+                  </div>
+                  <span className={cn("text-[10px] font-medium", priorityColor)}>
+                    {priorityLevel}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-xs p-3">
+                <div className="space-y-2">
+                  <p className="font-semibold text-sm">Priority Score: {priorityPercent}</p>
+                  <p className="text-xs text-slate-500">
+                    Based on: Popularity (40%) + Transaction Intent (30%) + Sentiment (20%) − Difficulty (10%)
+                  </p>
+                  <hr className="border-slate-200 dark:border-slate-700" />
+                  <div className="text-xs space-y-1">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">Popularity</span>
+                      <span className="font-medium">{opportunity.prompt_popularity_score ? Math.round(opportunity.prompt_popularity_score * 100) : 50}%</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">Transaction Intent</span>
+                      <span className="font-medium">{opportunity.prompt_transaction_score ? Math.round(opportunity.prompt_transaction_score * 100) : 0}%</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">Sentiment</span>
+                      <span className="font-medium">{opportunity.prompt_sentiment_score ? (opportunity.prompt_sentiment_score > 0 ? 'Positive' : opportunity.prompt_sentiment_score < 0 ? 'Negative' : 'Neutral') : 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">Difficulty</span>
+                      <span className="font-medium">{opportunity.difficulty_score ? Math.round(opportunity.difficulty_score * 100) : 0}%</span>
+                    </div>
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
           {/* Content */}
           <div className="flex-1 min-w-0">
@@ -189,6 +223,71 @@ function OpportunityCard({
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 line-clamp-2">
                 {opportunity.reason}
               </p>
+            )}
+
+            {/* AI Content Suggestion */}
+            {opportunity.content_suggestion && Object.keys(opportunity.content_suggestion).length > 0 && (
+              <div className="mt-3 p-3 bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4 text-cyan-500" />
+                  <span className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">AI Content Recommendation</span>
+                </div>
+                
+                {/* Suggested Title */}
+                {opportunity.content_suggestion.title && (
+                  <p className="text-sm font-medium text-slate-900 dark:text-white mb-2">
+                    📝 {opportunity.content_suggestion.title}
+                  </p>
+                )}
+
+                {/* Content Type & CTA */}
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {opportunity.content_suggestion.content_type && (
+                    <Badge variant="outline" className="text-xs bg-white dark:bg-slate-800">
+                      {opportunity.content_suggestion.content_type}
+                    </Badge>
+                  )}
+                  {opportunity.content_suggestion.cta_suggestion && (
+                    <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200">
+                      CTA: {opportunity.content_suggestion.cta_suggestion}
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Outline */}
+                {opportunity.content_suggestion.outline && opportunity.content_suggestion.outline.length > 0 && (
+                  <div className="mb-2">
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Key Points:</p>
+                    <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
+                      {opportunity.content_suggestion.outline.map((point: string, i: number) => (
+                        <li key={i} className="flex items-start gap-1">
+                          <span className="text-cyan-500">•</span>
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* SEO Keywords */}
+                {opportunity.content_suggestion.seo_keywords && opportunity.content_suggestion.seo_keywords.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    <span className="text-xs text-slate-500">Keywords:</span>
+                    {opportunity.content_suggestion.seo_keywords.slice(0, 5).map((kw: string, i: number) => (
+                      <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">
+                        {kw}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                {/* Priority Reason */}
+                {opportunity.content_suggestion.priority_reason && (
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
+                    💡 {opportunity.content_suggestion.priority_reason}
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Related pages */}
@@ -289,14 +388,29 @@ export default function Opportunities() {
       minPriority, 
       page 
     }],
-    queryFn: () => opportunitiesApi.list({
-      project_id: projectId || undefined,
-      status: status !== 'all' ? status : undefined,
-      recommended_action: action !== 'all' ? action : undefined,
-      min_priority: minPriority ? parseInt(minPriority) / 100 : undefined, // Convert to 0-1 scale
-      page,
-      page_size: 20,
-    }),
+    queryFn: () => {
+      // Convert priority range to min/max values (0-1 scale)
+      let min_priority: number | undefined
+      let max_priority: number | undefined
+      if (minPriority === 'high') {
+        min_priority = 0.70
+      } else if (minPriority === 'medium') {
+        min_priority = 0.40
+        max_priority = 0.69
+      } else if (minPriority === 'low') {
+        max_priority = 0.39
+      }
+      
+      return opportunitiesApi.list({
+        project_id: projectId || undefined,
+        status: status !== 'all' ? status : undefined,
+        recommended_action: action !== 'all' ? action : undefined,
+        min_priority,
+        max_priority,
+        page,
+        page_size: 20,
+      })
+    },
     enabled: !!projectId, // Only fetch when project is selected
     refetchInterval: 10000, // Refresh every 10 seconds
   })
@@ -347,6 +461,68 @@ export default function Opportunities() {
     }
   }
 
+  // Regenerate AI suggestions state
+  const [regenerateTaskId, setRegenerateTaskId] = useState<string | null>(null)
+  const [regenerateProgress, setRegenerateProgress] = useState<{
+    processed: number
+    total: number
+    updated: number
+    current_item?: string
+  } | null>(null)
+
+  // Poll for regenerate task progress
+  const { data: regenerateTaskStatus } = useQuery({
+    queryKey: ['task-status', regenerateTaskId],
+    queryFn: async () => {
+      const response = await fetch(`/api/jobs/${regenerateTaskId}`)
+      return response.json()
+    },
+    enabled: !!regenerateTaskId,
+    refetchInterval: 1000,
+  })
+
+  // Update progress when task status changes
+  useEffect(() => {
+    if (!regenerateTaskStatus || !regenerateTaskId) return
+
+    if (regenerateTaskStatus.state === 'PROGRESS' && regenerateTaskStatus.meta) {
+      setRegenerateProgress(regenerateTaskStatus.meta)
+    } else if (regenerateTaskStatus.state === 'SUCCESS' || regenerateTaskStatus.ready) {
+      setRegenerateTaskId(null)
+      setRegenerateProgress(null)
+      queryClient.invalidateQueries({ queryKey: ['opportunities'] })
+      toast({
+        title: 'AI Suggestions Complete',
+        description: `${regenerateTaskStatus.result?.total || 0} opportunities processed, ${regenerateTaskStatus.result?.updated || 0} updated.`,
+      })
+    } else if (regenerateTaskStatus.state === 'FAILURE') {
+      setRegenerateTaskId(null)
+      setRegenerateProgress(null)
+      toast({
+        title: 'AI Suggestions Failed',
+        description: 'An error occurred while generating suggestions.',
+        variant: 'destructive',
+      })
+    }
+  }, [regenerateTaskStatus, regenerateTaskId, queryClient, toast])
+
+  // Regenerate AI suggestions mutation
+  const regenerateMutation = useMutation({
+    mutationFn: () => opportunitiesApi.regenerateSuggestions(projectId!),
+    onSuccess: (response) => {
+      const count = response.data.opportunity_count || 0
+      setRegenerateTaskId(response.data.task_id)
+      setRegenerateProgress({ processed: 0, total: count, updated: 0 })
+      toast({ 
+        title: 'AI Suggestions Started', 
+        description: `Generating content suggestions for ${count} opportunities...` 
+      })
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Regeneration failed', description: error.message, variant: 'destructive' })
+    },
+  })
+
   const opportunities = data?.data?.opportunities || []
   const total = Object.values(data?.data?.by_status || {}).reduce((a, b) => a + b, 0) as number
   const byStatus = data?.data?.by_status || {}
@@ -396,24 +572,67 @@ export default function Opportunities() {
           </p>
         </div>
         {projectId && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Download className="w-4 h-4 mr-2" />
-                Export
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleExportCsv}>
-                Export as CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportJson}>
-                Export as JSON
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline"
+              onClick={() => regenerateMutation.mutate()}
+              disabled={regenerateMutation.isPending || !!regenerateTaskId}
+              className="bg-gradient-to-r from-cyan-50 to-blue-50 hover:from-cyan-100 hover:to-blue-100 border-cyan-200 dark:from-cyan-900/20 dark:to-blue-900/20 dark:border-cyan-800"
+            >
+              <Sparkles className="w-4 h-4 mr-2 text-cyan-500" />
+              {regenerateTaskId ? 'Generating...' : 'Regenerate AI Suggestions'}
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <Download className="w-4 h-4 mr-2" />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportCsv}>
+                  Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportJson}>
+                  Export as JSON
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         )}
       </div>
+
+      {/* AI Suggestions Progress */}
+      {(regenerateProgress || regenerateTaskId) && (
+        <Card className="border-cyan-200 dark:border-cyan-800 bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-cyan-100 dark:bg-cyan-900/50 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-cyan-500 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-cyan-700 dark:text-cyan-300">
+                    Generating AI Suggestions
+                  </span>
+                </div>
+                {/* Animated indeterminate progress bar */}
+                <div className="w-full bg-cyan-200 dark:bg-cyan-800 rounded-full h-2 mb-2 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-cyan-400 via-cyan-500 to-cyan-400 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]"
+                    style={{ 
+                      width: '40%',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-cyan-600 dark:text-cyan-400">
+                  Processing opportunities with Azure OpenAI...
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Status Overview */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -473,12 +692,13 @@ export default function Opportunities() {
             {/* Priority filter */}
             <Select value={minPriority || 'any'} onValueChange={(v) => setMinPriority(v === 'any' ? '' : v)}>
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Min Priority" />
+                <SelectValue placeholder="Priority" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="any">Any Priority</SelectItem>
-                <SelectItem value="70">High (70+)</SelectItem>
-                <SelectItem value="40">Medium+ (40+)</SelectItem>
+                <SelectItem value="high">High (70-100)</SelectItem>
+                <SelectItem value="medium">Medium (40-69)</SelectItem>
+                <SelectItem value="low">Low (0-39)</SelectItem>
               </SelectContent>
             </Select>
 

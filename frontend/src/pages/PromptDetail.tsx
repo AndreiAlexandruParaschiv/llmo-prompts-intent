@@ -18,6 +18,7 @@ import {
   Lightbulb,
   Zap,
   Info,
+  Hash,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -232,40 +233,25 @@ export default function PromptDetail() {
             )}
           </Card>
 
-          {/* Prompt Text */}
-          <Card className="border-slate-200 dark:border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-lg">Prompt Analysis</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-slate-500">Original Text</label>
-                <p className="text-slate-900 dark:text-white mt-1">{prompt.raw_text}</p>
-              </div>
-              {prompt.normalized_text && prompt.normalized_text !== prompt.raw_text && (
-                <div>
-                  <label className="text-sm font-medium text-slate-500">Normalized Text</label>
-                  <p className="text-slate-700 dark:text-slate-300 mt-1">{prompt.normalized_text}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Why This Intent? */}
+          {/* Why This Intent? - GPT-4o Analysis */}
           {intentExplanation && (
-            <Card className="border-slate-200 dark:border-slate-800 border-l-4 border-l-cyan-500">
+            <Card className="border-slate-200 dark:border-slate-800 border-l-4 border-l-violet-500">
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Lightbulb className="w-5 h-5 text-cyan-500" />
+                  <Lightbulb className="w-5 h-5 text-violet-500" />
                   Why This Intent?
+                  <Badge className="bg-gradient-to-r from-violet-500 to-purple-500 text-white text-[10px] font-medium">
+                    <Sparkles className="w-3 h-3 mr-1" />
+                    GPT-4o
+                  </Badge>
                 </CardTitle>
                 <CardDescription>
-                  Understanding the classification
+                  Classification powered by Azure OpenAI GPT-4o
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Explanation */}
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                {/* AI Explanation */}
+                <div className="p-3 rounded-lg bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 border border-violet-200 dark:border-violet-800">
                   <p className="text-sm text-slate-700 dark:text-slate-300">
                     {intentExplanation.explanation}
                   </p>
@@ -273,8 +259,8 @@ export default function PromptDetail() {
 
                 {/* Classification Details */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                  <div className="p-3 rounded-lg bg-violet-50 dark:bg-violet-900/20">
+                    <div className="flex items-center gap-2 text-xs text-violet-600 dark:text-violet-400 mb-1">
                       <Zap className="w-3.5 h-3.5" />
                       Intent Type
                     </div>
@@ -285,10 +271,10 @@ export default function PromptDetail() {
                       {intentExplanation.intent.replace('_', ' ')}
                     </Badge>
                   </div>
-                  <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                  <div className="p-3 rounded-lg bg-violet-50 dark:bg-violet-900/20">
+                    <div className="flex items-center gap-2 text-xs text-violet-600 dark:text-violet-400 mb-1">
                       <Target className="w-3.5 h-3.5" />
-                      Confidence
+                      AI Confidence
                     </div>
                     <span className="text-lg font-bold text-slate-900 dark:text-white">
                       {Math.round(intentExplanation.confidence * 100)}%
@@ -296,31 +282,10 @@ export default function PromptDetail() {
                   </div>
                 </div>
 
-                {/* Matched Patterns */}
-                {intentExplanation.signals && intentExplanation.signals.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                      <Info className="w-3.5 h-3.5" />
-                      Detected Patterns
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {intentExplanation.signals.map((signal, i) => (
-                        <Badge 
-                          key={i} 
-                          variant="outline" 
-                          className="text-xs font-mono bg-slate-50 dark:bg-slate-800"
-                        >
-                          {signal.replace('Matched: ', '')}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Transaction Score Explanation */}
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                {/* Transaction Score from GPT-4o */}
+                <div className="pt-2 border-t border-violet-200 dark:border-violet-700">
                   <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="text-slate-500">Transaction Likelihood</span>
+                    <span className="text-violet-600 dark:text-violet-400">Transaction Likelihood (GPT-4o)</span>
                     <span className={cn(
                       "font-bold",
                       intentExplanation.transaction_score >= 0.7 ? "text-emerald-500" :
@@ -338,6 +303,37 @@ export default function PromptDetail() {
                       : "Low immediate conversion intent - primarily informational"
                     }
                   </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Pattern Detection - Rule-based */}
+          {intentExplanation?.signals && intentExplanation.signals.length > 0 && (
+            <Card className="border-slate-200 dark:border-slate-800 border-l-4 border-l-slate-400">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Info className="w-5 h-5 text-slate-500" />
+                  Keyword Detection
+                  <Badge variant="outline" className="text-[10px] text-slate-500">
+                    Rule-Based
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  Keywords detected by pattern matching
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {intentExplanation.signals.map((signal, i) => (
+                    <Badge 
+                      key={i} 
+                      variant="outline" 
+                      className="text-xs font-mono bg-slate-50 dark:bg-slate-800"
+                    >
+                      {signal.replace('Matched: ', '').replace('AI: ', '')}
+                    </Badge>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -389,25 +385,10 @@ export default function PromptDetail() {
           <Card className="border-slate-200 dark:border-slate-800">
             <CardHeader>
               <CardTitle className="text-lg">Scores & Metrics</CardTitle>
+              <CardDescription className="text-xs">From CSV import data</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Transaction Score */}
-              <div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="flex items-center gap-2 text-slate-500">
-                    <TrendingUp className="w-4 h-4" />
-                    Transaction Score
-                  </span>
-                  <span className="font-bold">
-                    {Math.round(prompt.transaction_score * 100)}%
-                  </span>
-                </div>
-                <Progress value={prompt.transaction_score * 100} className="mt-2 h-2" />
-              </div>
-
-              <Separator />
-
-              {/* Popularity */}
+              {/* Popularity - from CSV */}
               {prompt.popularity_score !== null && (
                 <div>
                   <div className="flex items-center justify-between text-sm">
@@ -420,26 +401,48 @@ export default function PromptDetail() {
                     </span>
                   </div>
                   <Progress value={prompt.popularity_score * 100} className="mt-2 h-2" />
+                  <p className="text-[10px] text-slate-400 mt-1">From CSV data</p>
                 </div>
               )}
 
-              {/* Sentiment */}
-              {prompt.sentiment_score !== null && (
-                <>
-                  <Separator />
-                  <div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-slate-500">Sentiment</span>
-                      <span className={cn(
-                        "font-bold",
-                        prompt.sentiment_score > 0 ? "text-emerald-500" :
-                        prompt.sentiment_score < 0 ? "text-red-500" : "text-slate-500"
-                      )}>
-                        {prompt.sentiment_score > 0 ? '+' : ''}{prompt.sentiment_score.toFixed(2)}
-                      </span>
-                    </div>
+              {/* Sentiment - from CSV */}
+              <Separator />
+              <div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">Sentiment</span>
+                  {prompt.sentiment_score === null || prompt.sentiment_score === undefined ? (
+                    <span className="text-slate-400 italic text-xs">Not available</span>
+                  ) : prompt.sentiment_score === 0 ? (
+                    <span className="text-slate-500 font-medium">Neutral</span>
+                  ) : (
+                    <span className={cn(
+                      "font-bold",
+                      prompt.sentiment_score > 0 ? "text-emerald-500" : "text-red-500"
+                    )}>
+                      {prompt.sentiment_score > 0 ? 'Positive' : 'Negative'} ({prompt.sentiment_score > 0 ? '+' : ''}{prompt.sentiment_score.toFixed(2)})
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">From CSV data</p>
+              </div>
+
+              <Separator />
+
+              {/* Semantic Match - from all-MiniLM-L6-v2 */}
+              {prompt.best_match_score && (
+                <div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2 text-cyan-600 dark:text-cyan-400">
+                      <Sparkles className="w-4 h-4" />
+                      Semantic Match
+                    </span>
+                    <span className="font-bold">
+                      {Math.round(prompt.best_match_score * 100)}%
+                    </span>
                   </div>
-                </>
+                  <Progress value={prompt.best_match_score * 100} className="mt-2 h-2" />
+                  <p className="text-[10px] text-cyan-500 mt-1">all-MiniLM-L6-v2 embeddings</p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -450,6 +453,16 @@ export default function PromptDetail() {
               <CardTitle className="text-lg">Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Hash className="w-4 h-4 text-slate-400" />
+                <div>
+                  <p className="text-xs text-slate-500">Word Count</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                    {prompt.raw_text.split(/\s+/).length} words
+                  </p>
+                </div>
+              </div>
+
               {prompt.topic && (
                 <div className="flex items-center gap-3">
                   <MessageSquareText className="w-4 h-4 text-slate-400" />

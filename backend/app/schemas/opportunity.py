@@ -67,6 +67,8 @@ class OpportunityResponse(BaseModel):
     prompt_topic: Optional[str] = None
     prompt_intent: Optional[str] = None
     prompt_transaction_score: Optional[float] = None
+    prompt_popularity_score: Optional[float] = None
+    prompt_sentiment_score: Optional[float] = None
     
     class Config:
         from_attributes = True
