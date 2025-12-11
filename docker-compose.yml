@@ -1,0 +1,108 @@
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: llmo-postgres
+    environment:
+      POSTGRES_USER: llmo
+      POSTGRES_PASSWORD: llmo_dev_password
+      POSTGRES_DB: llmo_prompts
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U llmo -d llmo_prompts"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Redis for Celery broker and caching
+  redis:
+    image: redis:7-alpine
+    container_name: llmo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: llmo-backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://llmo:llmo_dev_password@postgres:5432/llmo_prompts
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - DEBUG=true
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - uploads_data:/app/uploads
+      - snapshots_data:/app/snapshots
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Celery Worker
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: llmo-celery-worker
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://llmo:llmo_dev_password@postgres:5432/llmo_prompts
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    volumes:
+      - ./backend:/app
+      - uploads_data:/app/uploads
+      - snapshots_data:/app/snapshots
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.core.celery_app worker --loglevel=info
+
+  # React Frontend (Development)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: llmo-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:
+  snapshots_data:
+
