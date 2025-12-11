@@ -23,54 +23,159 @@ router = APIRouter()
 
 async def search_competitors(query: str, our_domain: str, num_results: int = 5) -> List[Dict[str, str]]:
     """
-    Search for competitor content using a search API.
+    Search for competitor content using multiple search approaches.
     Returns list of {url, title, snippet} excluding our domain.
     """
     results = []
     
-    # Use a simple search approach - in production you'd use Google Custom Search API or similar
-    # For now, we'll use DuckDuckGo HTML search as a fallback
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # DuckDuckGo HTML search
-            response = await client.get(
-                "https://html.duckduckgo.com/html/",
-                params={"q": query},
-                headers={"User-Agent": "Mozilla/5.0 (compatible; ContentAnalyzer/1.0)"},
-                follow_redirects=True
-            )
+    # Try multiple search methods
+    search_methods = [
+        _search_via_duckduckgo_api,
+        _search_via_duckduckgo_html,
+        _search_via_bing,
+    ]
+    
+    for search_method in search_methods:
+        try:
+            results = await search_method(query, our_domain, num_results)
+            if results:
+                logger.info(f"Search successful via {search_method.__name__}: {len(results)} results")
+                break
+        except Exception as e:
+            logger.warning(f"Search method {search_method.__name__} failed: {e}")
+            continue
+    
+    return results
+
+
+async def _search_via_duckduckgo_api(query: str, our_domain: str, num_results: int) -> List[Dict[str, str]]:
+    """Search using DuckDuckGo Instant Answer API."""
+    results = []
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            "https://api.duckduckgo.com/",
+            params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            follow_redirects=True
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
             
-            if response.status_code == 200:
-                from bs4 import BeautifulSoup
-                soup = BeautifulSoup(response.text, 'html.parser')
+            # Get related topics
+            for topic in data.get("RelatedTopics", [])[:num_results * 2]:
+                if isinstance(topic, dict) and "FirstURL" in topic:
+                    url = topic.get("FirstURL", "")
+                    if our_domain and our_domain.lower() in url.lower():
+                        continue
+                    if not url.startswith("http"):
+                        continue
+                    results.append({
+                        "url": url,
+                        "title": topic.get("Text", "")[:100],
+                        "snippet": topic.get("Text", "")
+                    })
+                    if len(results) >= num_results:
+                        break
+    
+    return results
+
+
+async def _search_via_duckduckgo_html(query: str, our_domain: str, num_results: int) -> List[Dict[str, str]]:
+    """Search using DuckDuckGo HTML interface."""
+    results = []
+    from bs4 import BeautifulSoup
+    
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": query},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            },
+            follow_redirects=True
+        )
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Try multiple selectors
+            for result in soup.select('.result, .web-result, .results_links'):
+                link = result.select_one('a.result__a, a.result__url, a[href]')
+                snippet = result.select_one('.result__snippet, .result__body, .snippet')
+                title_elem = result.select_one('.result__title, h2, h3')
                 
-                for result in soup.select('.result'):
-                    link = result.select_one('.result__a')
-                    snippet = result.select_one('.result__snippet')
+                if link:
+                    url = link.get('href', '')
                     
-                    if link:
-                        url = link.get('href', '')
-                        title = link.get_text(strip=True)
-                        
-                        # Skip our own domain
-                        if our_domain and our_domain.lower() in url.lower():
-                            continue
-                        
-                        # Skip non-http URLs
-                        if not url.startswith('http'):
-                            continue
-                        
-                        results.append({
-                            "url": url,
-                            "title": title,
-                            "snippet": snippet.get_text(strip=True) if snippet else ""
-                        })
-                        
-                        if len(results) >= num_results:
-                            break
-                            
-    except Exception as e:
-        logger.warning(f"Search failed: {e}")
+                    # DuckDuckGo redirects - extract actual URL
+                    if 'uddg=' in url:
+                        import urllib.parse
+                        parsed = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+                        url = parsed.get('uddg', [url])[0]
+                    
+                    title = title_elem.get_text(strip=True) if title_elem else link.get_text(strip=True)
+                    
+                    if our_domain and our_domain.lower() in url.lower():
+                        continue
+                    if not url.startswith('http'):
+                        continue
+                    
+                    results.append({
+                        "url": url,
+                        "title": title,
+                        "snippet": snippet.get_text(strip=True) if snippet else ""
+                    })
+                    
+                    if len(results) >= num_results:
+                        break
+    
+    return results
+
+
+async def _search_via_bing(query: str, our_domain: str, num_results: int) -> List[Dict[str, str]]:
+    """Search using Bing HTML interface."""
+    results = []
+    from bs4 import BeautifulSoup
+    
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            "https://www.bing.com/search",
+            params={"q": query},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            },
+            follow_redirects=True
+        )
+        
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            for result in soup.select('.b_algo, li.b_algo'):
+                link = result.select_one('h2 a, a')
+                snippet = result.select_one('.b_caption p, p')
+                
+                if link:
+                    url = link.get('href', '')
+                    title = link.get_text(strip=True)
+                    
+                    if our_domain and our_domain.lower() in url.lower():
+                        continue
+                    if not url.startswith('http'):
+                        continue
+                    
+                    results.append({
+                        "url": url,
+                        "title": title,
+                        "snippet": snippet.get_text(strip=True) if snippet else ""
+                    })
+                    
+                    if len(results) >= num_results:
+                        break
     
     return results
 
