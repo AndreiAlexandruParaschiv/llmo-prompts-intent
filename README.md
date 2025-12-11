@@ -7,7 +7,6 @@ A **Prompt-to-Content Gap Analysis Platform** that helps identify content opport
 ### Prerequisites
 
 - **Docker Desktop** - [Download here](https://www.docker.com/products/docker-desktop/)
-- **Git** - [Download here](https://git-scm.com/downloads)
 
 ### Step 1: Clone & Configure
 
