@@ -259,7 +259,7 @@ export default function OrphanPages() {
         min_match_threshold: parseInt(threshold) / 100,
         page,
         page_size: pageSize,
-        include_suggestions: true,
+        include_suggestions: false, // Don't auto-generate - let users request on-demand
       })
       return response.data
     },
