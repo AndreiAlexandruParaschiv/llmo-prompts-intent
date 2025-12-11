@@ -21,9 +21,9 @@ cp .env.example .env
 
 ### Step 2: Add Your API Keys (Optional but Recommended)
 
-Edit the `.env` file to add your Azure OpenAI credentials for AI-enhanced features. See `.env.example` for the template.
+Edit the `.env` file to add your AI credentials for enhanced features. See `.env.example` for the template.
 
-> **Note:** The app works without Azure OpenAI using rule-based classification. AI features are optional but recommended for better accuracy.
+> **Note:** The app works without AI credentials using rule-based classification. AI features are optional but recommended for better accuracy.
 
 ### Step 3: Start the Application
 
@@ -108,7 +108,7 @@ Prompt,Topic,Region,Popularity,Sentiment
 
 ## ✨ Features
 
-### 🤖 AI-Powered Analysis (with Azure OpenAI)
+### 🤖 AI-Powered Analysis
 - **Intent Classification**: 13 intent categories (Transactional, Informational, Commercial, etc.)
 - **"Why This Intent?"**: Detailed AI explanation for each classification
 - **Content Suggestions**: Title, outline, keywords, and CTA recommendations
@@ -148,15 +148,15 @@ See `.env.example` for all available options. Key settings:
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `AZURE_OPENAI_ENDPOINT` | Your Azure OpenAI endpoint URL | For AI features |
-| `AZURE_OPENAI_KEY` | Your Azure OpenAI API key | For AI features |
-| `AZURE_COMPLETION_DEPLOYMENT` | Deployment name (e.g., `gpt-4o`) | For AI features |
+| `AZURE_OPENAI_ENDPOINT` | Your AI endpoint URL | For AI features |
+| `AZURE_OPENAI_KEY` | Your AI API key | For AI features |
+| `AZURE_COMPLETION_DEPLOYMENT` | AI model deployment name | For AI features |
 
 > **Note:** Database credentials are pre-configured in `docker-compose.yml` for local development. For production, use secure passwords and environment-specific configuration.
 
-### Without Azure OpenAI
+### Without AI
 
-The app works without Azure OpenAI using rule-based classification:
+The app works without AI using rule-based classification:
 - Intent detection uses keyword patterns
 - Content suggestions are template-based
 - All core features remain functional
@@ -187,7 +187,7 @@ The app works without Azure OpenAI using rule-based classification:
                                                    │
                                                    ▼
                                           ┌─────────────────┐
-                                          │  Azure OpenAI   │
+                                          │       AI        │
                                           │    (optional)   │
                                           └─────────────────┘
 ```
@@ -300,7 +300,7 @@ docker-compose up -d
 
 ### AI features not working
 
-1. Check your `.env` file has correct Azure OpenAI credentials
+1. Check your `.env` file has correct AI credentials
 2. Verify the deployment name matches your Azure setup
 3. Check backend logs: `docker-compose logs -f backend`
 
@@ -327,7 +327,7 @@ The opportunities CSV export includes:
 | Reason | Why this action is recommended |
 | Status | new, in_progress, completed, dismissed |
 | Difficulty Score | 0-1 implementation difficulty |
-| AI Suggested Title | GPT-4o generated title |
+| AI Suggested Title | AI generated title |
 | AI Content Type | Suggested format (FAQ, guide, landing page) |
 | AI Outline | Key points to cover |
 | AI Call to Action | Suggested CTA text |

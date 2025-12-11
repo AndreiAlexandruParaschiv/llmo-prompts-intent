@@ -224,7 +224,7 @@ export default function Prompts() {
       setReclassifyProgress({ processed: 0, total: response.data.prompt_count, changed: 0 })
       toast({
         title: 'AI Reclassification Started',
-        description: `Analyzing ${response.data.prompt_count} prompts with Azure OpenAI...`,
+        description: `Analyzing ${response.data.prompt_count} prompts with AI...`,
       })
     },
     onError: (error: Error) => {
@@ -333,7 +333,7 @@ export default function Prompts() {
                   />
                 </div>
                 <p className="text-xs text-violet-600 dark:text-violet-400">
-                  Analyzing prompts with Azure OpenAI GPT-4o...
+                  Analyzing prompts with AI...
                 </p>
               </div>
             </div>

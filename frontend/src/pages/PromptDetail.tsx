@@ -233,7 +233,7 @@ export default function PromptDetail() {
             )}
           </Card>
 
-          {/* Why This Intent? - GPT-4o Analysis */}
+          {/* Why This Intent? - AI Analysis */}
           {intentExplanation && (
             <Card className="border-slate-200 dark:border-slate-800 border-l-4 border-l-violet-500">
               <CardHeader className="pb-3">
@@ -242,11 +242,11 @@ export default function PromptDetail() {
                   Why This Intent?
                   <Badge className="bg-gradient-to-r from-violet-500 to-purple-500 text-white text-[10px] font-medium">
                     <Sparkles className="w-3 h-3 mr-1" />
-                    GPT-4o
+                    AI
                   </Badge>
                 </CardTitle>
                 <CardDescription>
-                  Classification powered by Azure OpenAI GPT-4o
+                  AI-powered classification
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -282,10 +282,10 @@ export default function PromptDetail() {
                   </div>
                 </div>
 
-                {/* Transaction Score from GPT-4o */}
+                {/* Transaction Score from AI */}
                 <div className="pt-2 border-t border-violet-200 dark:border-violet-700">
                   <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="text-violet-600 dark:text-violet-400">Transaction Likelihood (GPT-4o)</span>
+                    <span className="text-violet-600 dark:text-violet-400">Transaction Likelihood</span>
                     <span className={cn(
                       "font-bold",
                       intentExplanation.transaction_score >= 0.7 ? "text-emerald-500" :

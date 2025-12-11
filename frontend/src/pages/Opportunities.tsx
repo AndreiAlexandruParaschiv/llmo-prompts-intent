@@ -626,7 +626,7 @@ export default function Opportunities() {
                   />
                 </div>
                 <p className="text-xs text-cyan-600 dark:text-cyan-400">
-                  Processing opportunities with Azure OpenAI...
+                  Processing opportunities with AI...
                 </p>
               </div>
             </div>
