@@ -190,6 +190,27 @@ export const promptsApi = {
     api.post(`/prompts/reclassify-with-ai/`, null, { params: { project_id: projectId } }),
 }
 
+// Orphan page types
+export interface OrphanPageSuggestion {
+  suggested_prompts: string[]
+  primary_intent: string
+  target_audience: string
+  content_summary: string
+  top_keywords: string[]
+}
+
+export interface OrphanPage {
+  id: string
+  url: string
+  title: string | null
+  meta_description: string | null
+  word_count: string | null
+  best_match_score: number | null
+  match_status: 'no_matches' | 'low_match'
+  crawled_at: string | null
+  ai_suggestion?: OrphanPageSuggestion
+}
+
 // Pages
 export const pagesApi = {
   list: (params: { project_id?: string; search?: string; filter_type?: string; page?: number; page_size?: number }) =>
@@ -214,6 +235,28 @@ export const pagesApi = {
     api.post(`/pages/crawl-jobs/${jobId}/cancel`),
   generateMissingEmbeddings: (projectId: string) =>
     api.post(`/pages/generate-missing-embeddings`, null, { params: { project_id: projectId } }),
+  getOrphanPages: (params: { 
+    project_id: string
+    min_match_threshold?: number
+    page?: number
+    page_size?: number
+    include_suggestions?: boolean
+  }) =>
+    api.get<{
+      orphan_pages: OrphanPage[]
+      total: number
+      page: number
+      page_size: number
+      min_match_threshold: number
+      ai_enabled: boolean
+    }>('/pages/orphan-pages', { params }),
+  generateOrphanSuggestions: (pageId: string) =>
+    api.post<{
+      page_id: string
+      url: string
+      title: string
+      suggestion: OrphanPageSuggestion
+    }>(`/pages/orphan-pages/${pageId}/generate-suggestions`),
 }
 
 // Opportunities

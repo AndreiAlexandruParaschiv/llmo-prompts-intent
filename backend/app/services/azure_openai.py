@@ -219,6 +219,83 @@ Analyze the gap:"""
             return None
 
 
+    def generate_prompt_suggestion(
+        self,
+        page_url: str,
+        page_title: str,
+        page_content: str,
+        meta_description: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate a suggested search prompt/query for an orphan page.
+        
+        This helps identify what user queries this content could answer.
+        
+        Returns dict with:
+        - suggested_prompts: List of 3-5 queries this page could answer
+        - primary_intent: The main intent this page serves
+        - target_audience: Who would search for this
+        - content_summary: Brief summary of what the page offers
+        """
+        if not self.enabled or not self.client:
+            return None
+        
+        content_excerpt = page_content[:2000] if page_content else ""
+        meta_info = f"\nMeta Description: {meta_description}" if meta_description else ""
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.AZURE_COMPLETION_DEPLOYMENT,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an SEO and content strategist. Given a webpage, generate search queries that users might use to find this content.
+
+Think about:
+- What questions does this page answer?
+- What problems does it solve?
+- What information does it provide?
+- Who is the target audience?
+
+Generate realistic search queries that a user would type into Google or an AI assistant.
+
+Respond with JSON only:
+{
+  "suggested_prompts": ["query 1", "query 2", "query 3", "query 4", "query 5"],
+  "primary_intent": "transactional|informational|navigational|commercial|comparison",
+  "target_audience": "Brief description of who would search for this",
+  "content_summary": "One sentence summary of what this page offers",
+  "top_keywords": ["keyword1", "keyword2", "keyword3"]
+}"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Analyze this webpage and suggest search queries it could answer:
+
+URL: {page_url}
+Title: {page_title}
+{meta_info}
+
+Content excerpt:
+{content_excerpt}
+
+Generate suggested prompts:"""
+                    }
+                ],
+                temperature=0.4,
+                max_tokens=500,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            logger.debug(f"LLM prompt suggestion for page: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Azure OpenAI prompt suggestion failed: {e}")
+            return None
+
+
 # Singleton instance
 azure_openai_service = AzureOpenAIService()
 

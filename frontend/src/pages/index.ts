@@ -5,5 +5,6 @@ export { default as Import } from './Import'
 export { default as Prompts } from './Prompts'
 export { default as PromptDetail } from './PromptDetail'
 export { default as Pages } from './Pages'
+export { default as OrphanPages } from './OrphanPages'
 export { default as Opportunities } from './Opportunities'
 

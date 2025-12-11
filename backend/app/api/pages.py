@@ -1,16 +1,19 @@
 """Crawled pages API endpoints."""
 
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_, or_
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.logging import get_logger
 from app.models.page import Page
+from app.models.match import Match
 from app.models.crawl_job import CrawlJob, CrawlStatus
 from app.schemas.page import PageResponse, PageListResponse
+from app.services.azure_openai import azure_openai_service
 from datetime import datetime
 
 logger = get_logger(__name__)
@@ -353,6 +356,132 @@ async def crawl_single_url(
         "task_id": task.id,
         "url": url,
         "status": "started",
+    }
+
+
+@router.get("/orphan-pages", response_model=dict)
+async def get_orphan_pages(
+    project_id: UUID = Query(...),
+    min_match_threshold: float = Query(0.5, description="Pages with best match below this are considered orphans"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    include_suggestions: bool = Query(False, description="Include AI-generated prompt suggestions"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get pages that don't have good matches to any prompts (orphan pages).
+    These are pages that exist but no user queries match them well.
+    """
+    from sqlalchemy import outerjoin
+    from sqlalchemy.sql import literal_column
+    
+    # Subquery to get the best match score for each page
+    best_match_subquery = (
+        select(
+            Match.page_id,
+            func.max(Match.similarity_score).label("best_score")
+        )
+        .group_by(Match.page_id)
+        .subquery()
+    )
+    
+    # Query pages with their best match score (or NULL if no matches)
+    query = (
+        select(
+            Page,
+            best_match_subquery.c.best_score
+        )
+        .outerjoin(best_match_subquery, Page.id == best_match_subquery.c.page_id)
+        .where(
+            Page.project_id == project_id,
+            Page.embedding.isnot(None),  # Only pages with embeddings
+            or_(
+                best_match_subquery.c.best_score.is_(None),  # No matches at all
+                best_match_subquery.c.best_score < min_match_threshold  # Below threshold
+            )
+        )
+    )
+    
+    # Count total
+    count_query = select(func.count()).select_from(query.subquery())
+    total = await db.scalar(count_query)
+    
+    # Get paginated results
+    query = query.order_by(
+        # Pages with NO matches first, then by lowest score
+        best_match_subquery.c.best_score.asc().nullsfirst()
+    )
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    
+    result = await db.execute(query)
+    rows = result.all()
+    
+    orphan_pages = []
+    for row in rows:
+        page_obj = row[0]
+        best_score = row[1]
+        
+        page_data = {
+            "id": str(page_obj.id),
+            "url": page_obj.url,
+            "title": page_obj.title,
+            "meta_description": page_obj.meta_description,
+            "word_count": page_obj.word_count,
+            "best_match_score": round(best_score * 100, 1) if best_score else None,
+            "match_status": "no_matches" if best_score is None else "low_match",
+            "crawled_at": page_obj.crawled_at.isoformat() if page_obj.crawled_at else None,
+        }
+        
+        # Include AI suggestions if requested
+        if include_suggestions and azure_openai_service.enabled:
+            suggestion = azure_openai_service.generate_prompt_suggestion(
+                page_url=page_obj.url,
+                page_title=page_obj.title or "",
+                page_content=page_obj.content or "",
+                meta_description=page_obj.meta_description
+            )
+            page_data["ai_suggestion"] = suggestion
+        
+        orphan_pages.append(page_data)
+    
+    return {
+        "orphan_pages": orphan_pages,
+        "total": total or 0,
+        "page": page,
+        "page_size": page_size,
+        "min_match_threshold": min_match_threshold,
+        "ai_enabled": azure_openai_service.enabled,
+    }
+
+
+@router.post("/orphan-pages/{page_id}/generate-suggestions", response_model=dict)
+async def generate_orphan_page_suggestions(
+    page_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate AI prompt suggestions for a specific orphan page."""
+    page = await db.get(Page, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    if not azure_openai_service.enabled:
+        raise HTTPException(status_code=400, detail="AI service not available")
+    
+    suggestion = azure_openai_service.generate_prompt_suggestion(
+        page_url=page.url,
+        page_title=page.title or "",
+        page_content=page.content or "",
+        meta_description=page.meta_description
+    )
+    
+    if not suggestion:
+        raise HTTPException(status_code=500, detail="Failed to generate suggestions")
+    
+    return {
+        "page_id": str(page_id),
+        "url": page.url,
+        "title": page.title,
+        "suggestion": suggestion,
     }
 
 

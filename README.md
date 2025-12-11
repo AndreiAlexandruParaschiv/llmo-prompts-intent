@@ -136,6 +136,12 @@ Prompt,Topic,Region,Popularity,Sentiment
 - **Action Types**: Create Content, Expand Content, Add CTA, Improve Ranking
 - **Export**: CSV with all AI suggestions included
 
+### 📄 Orphan Pages Detection
+- **Find Unused Content**: Discover pages that don't match any user prompts
+- **AI Prompt Suggestions**: Generate candidate prompts for orphan pages
+- **Content Audit**: Identify content that may need promotion or repurposing
+- **Threshold Filtering**: Adjust match threshold to find low-performing content
+
 ---
 
 ## 🔧 Configuration
