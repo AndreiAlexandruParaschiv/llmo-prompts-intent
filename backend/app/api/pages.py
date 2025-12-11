@@ -271,94 +271,6 @@ async def generate_missing_embeddings(
     }
 
 
-@router.get("/{page_id}", response_model=PageResponse)
-async def get_page(
-    page_id: UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    """Get page details."""
-    page = await db.get(Page, page_id)
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
-    
-    return PageResponse(
-        id=page.id,
-        project_id=page.project_id,
-        url=page.url,
-        canonical_url=page.canonical_url,
-        status_code=page.status_code,
-        content_type=page.content_type,
-        title=page.title,
-        meta_description=page.meta_description,
-        word_count=page.word_count,
-        structured_data=page.structured_data or [],
-        mcp_checks=page.mcp_checks or {},
-        hreflang_tags=page.hreflang_tags or [],
-        crawled_at=page.crawled_at,
-        created_at=page.created_at,
-        updated_at=page.updated_at,
-    )
-
-
-@router.get("/{page_id}/content", response_model=dict)
-async def get_page_content(
-    page_id: UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    """Get page full content."""
-    page = await db.get(Page, page_id)
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
-    
-    return {
-        "id": str(page.id),
-        "url": page.url,
-        "title": page.title,
-        "meta_description": page.meta_description,
-        "content": page.content,
-        "word_count": page.word_count,
-    }
-
-
-@router.delete("/{page_id}")
-async def delete_page(
-    page_id: UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    """Delete a page."""
-    page = await db.get(Page, page_id)
-    if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
-    
-    await db.delete(page)
-    await db.commit()
-    
-    return {"message": "Page deleted successfully"}
-
-
-@router.post("/{project_id}/crawl-url", response_model=dict)
-async def crawl_single_url(
-    project_id: UUID,
-    url: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """Crawl a single URL and add to project."""
-    from app.models.project import Project
-    from app.workers.crawler_tasks import crawl_single_url as crawl_task
-    
-    project = await db.get(Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    task = crawl_task.delay(str(project_id), url)
-    
-    return {
-        "task_id": task.id,
-        "url": url,
-        "status": "started",
-    }
-
-
 @router.get("/orphan-pages", response_model=dict)
 async def get_orphan_pages(
     project_id: UUID = Query(...),
@@ -482,6 +394,95 @@ async def generate_orphan_page_suggestions(
         "url": page.url,
         "title": page.title,
         "suggestion": suggestion,
+    }
+
+
+# Dynamic routes with {page_id} must come AFTER static routes like /orphan-pages
+@router.get("/{page_id}", response_model=PageResponse)
+async def get_page(
+    page_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get page details."""
+    page = await db.get(Page, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    return PageResponse(
+        id=page.id,
+        project_id=page.project_id,
+        url=page.url,
+        canonical_url=page.canonical_url,
+        status_code=page.status_code,
+        content_type=page.content_type,
+        title=page.title,
+        meta_description=page.meta_description,
+        word_count=page.word_count,
+        structured_data=page.structured_data or [],
+        mcp_checks=page.mcp_checks or {},
+        hreflang_tags=page.hreflang_tags or [],
+        crawled_at=page.crawled_at,
+        created_at=page.created_at,
+        updated_at=page.updated_at,
+    )
+
+
+@router.get("/{page_id}/content", response_model=dict)
+async def get_page_content(
+    page_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get page full content."""
+    page = await db.get(Page, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    return {
+        "id": str(page.id),
+        "url": page.url,
+        "title": page.title,
+        "meta_description": page.meta_description,
+        "content": page.content,
+        "word_count": page.word_count,
+    }
+
+
+@router.delete("/{page_id}")
+async def delete_page(
+    page_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a page."""
+    page = await db.get(Page, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    await db.delete(page)
+    await db.commit()
+    
+    return {"message": "Page deleted successfully"}
+
+
+@router.post("/{project_id}/crawl-url", response_model=dict)
+async def crawl_single_url(
+    project_id: UUID,
+    url: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Crawl a single URL and add to project."""
+    from app.models.project import Project
+    from app.workers.crawler_tasks import crawl_single_url as crawl_task
+    
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    task = crawl_task.delay(str(project_id), url)
+    
+    return {
+        "task_id": task.id,
+        "url": url,
+        "status": "started",
     }
 
 
