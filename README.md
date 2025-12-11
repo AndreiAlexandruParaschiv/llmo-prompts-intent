@@ -61,8 +61,8 @@ That's it! 🎉
 1. Go to **Projects** in the sidebar
 2. Click **New Project**
 3. Enter:
-   - **Name**: e.g., "Virgin Atlantic Analysis"
-   - **Target Domains**: e.g., `virginatlantic.com, flights.virginatlantic.com`
+   - **Name**: e.g., "My Website Analysis"
+   - **Target Domains**: e.g., `example.com, blog.example.com`
 4. Click **Create**
 
 ### Step 2: Import Your Prompts
@@ -81,9 +81,9 @@ That's it! 🎉
 **Example CSV format:**
 ```csv
 Prompt,Topic,Region,Popularity,Sentiment
-"How to book Virgin Atlantic flights",flights,US,High,0.5
-"Virgin Atlantic baggage allowance",baggage,UK,Medium,0.0
-"Best seats on Virgin Atlantic A350",seats,US,Medium,0.7
+"How to reset my password",account,US,High,0.5
+"What is your return policy",returns,UK,Medium,0.0
+"Best product for beginners",products,US,Medium,0.7
 ```
 
 ### Step 3: Crawl Your Website
