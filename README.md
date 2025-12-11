@@ -378,4 +378,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-Built with ❤️ for content strategists and SEO teams.
+Built with ❤️ for GW
