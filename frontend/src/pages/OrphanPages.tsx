@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import {
-  FileQuestion,
+  Unlink,
   Sparkles,
   ExternalLink,
   ChevronDown,
@@ -317,7 +317,7 @@ export default function OrphanPages() {
   if (!projectId) {
     return (
       <div className="flex flex-col items-center justify-center h-96 text-center">
-        <FileQuestion className="w-16 h-16 text-slate-300 mb-4" />
+        <Unlink className="w-16 h-16 text-slate-300 mb-4" />
         <h2 className="text-xl font-semibold text-slate-700 dark:text-slate-300 mb-2">
           No Project Selected
         </h2>
@@ -352,7 +352,7 @@ export default function OrphanPages() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <FileQuestion className="w-7 h-7 text-amber-500" />
+            <Unlink className="w-7 h-7 text-amber-500" />
             Unmatched Content
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -393,7 +393,7 @@ export default function OrphanPages() {
           <Card className="border-slate-200 dark:border-slate-800">
             <CardContent className="p-4 flex items-center gap-4">
               <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
-                <FileQuestion className="w-5 h-5 text-white" />
+                <Unlink className="w-5 h-5 text-white" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{data.total}</p>
@@ -450,7 +450,7 @@ export default function OrphanPages() {
       ) : data?.orphan_pages.length === 0 ? (
         <Card className="border-slate-200 dark:border-slate-800">
           <CardContent className="p-12 text-center">
-            <FileQuestion className="w-16 h-16 text-emerald-400 mx-auto mb-4" />
+            <Unlink className="w-16 h-16 text-emerald-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
               All Content is Matched!
             </h3>

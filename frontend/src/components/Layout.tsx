@@ -5,7 +5,7 @@ import {
   MessageSquareText, 
   Globe, 
   Lightbulb,
-  FileQuestion,
+  Unlink,
   Swords,
   ChevronLeft,
   ChevronRight,
@@ -21,7 +21,7 @@ const navigation = [
   { name: 'Projects', href: '/projects', icon: FolderKanban },
   { name: 'Prompts', href: '/prompts', icon: MessageSquareText },
   { name: 'Pages', href: '/pages', icon: Globe },
-  { name: 'Unmatched Content', href: '/orphan-pages', icon: FileQuestion },
+  { name: 'Unmatched Content', href: '/orphan-pages', icon: Unlink },
   { name: 'Competitive', href: '/competitive', icon: Swords },
   { name: 'Opportunities', href: '/opportunities', icon: Lightbulb },
 ]
