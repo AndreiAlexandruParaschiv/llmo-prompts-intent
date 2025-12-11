@@ -30,7 +30,7 @@ import {
   SelectValue 
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { competitiveApi, HighIntentPrompt, CompetitiveAnalysis } from '@/services/api'
+import { competitiveApi, HighIntentPrompt, CompetitiveAnalysis as CompetitiveAnalysisData } from '@/services/api'
 import { useProjectStore } from '@/stores/projectStore'
 import { useToast } from '@/components/ui/use-toast'
 import { cn } from '@/lib/utils'
@@ -47,7 +47,7 @@ function PromptAnalysisCard({
   const [expanded, setExpanded] = useState(false)
   const [analysis, setAnalysis] = useState<{
     competitors: Array<{ url: string; title: string; snippet: string }>
-    ai_analysis: CompetitiveAnalysis | null
+    ai_analysis: CompetitiveAnalysisData | null
     our_content: { url: string; title: string; snippet: string }
   } | null>(null)
 
