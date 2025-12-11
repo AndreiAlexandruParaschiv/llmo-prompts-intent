@@ -20,7 +20,7 @@ const navigation = [
   { name: 'Projects', href: '/projects', icon: FolderKanban },
   { name: 'Prompts', href: '/prompts', icon: MessageSquareText },
   { name: 'Pages', href: '/pages', icon: Globe },
-  { name: 'Orphan Pages', href: '/orphan-pages', icon: FileQuestion },
+  { name: 'Unmatched Content', href: '/orphan-pages', icon: FileQuestion },
   { name: 'Opportunities', href: '/opportunities', icon: Lightbulb },
 ]
 

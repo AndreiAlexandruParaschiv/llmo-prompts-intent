@@ -245,7 +245,7 @@ export default function OrphanPages() {
   const { toast } = useToast()
   
   const [page, setPage] = useState(1)
-  const [threshold, setThreshold] = useState(searchParams.get('threshold') || '50')
+  const [threshold, setThreshold] = useState(searchParams.get('threshold') || '1')
   const pageSize = 20
 
   const projectId = searchParams.get('project_id') || selectedProjectId
@@ -345,10 +345,10 @@ export default function OrphanPages() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <FileQuestion className="w-7 h-7 text-amber-500" />
-            Orphan Pages
+            Unmatched Content
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Pages that don't match any user prompts well — discover potential content opportunities
+            Pages that no user prompts are asking about — content that may need promotion or new search queries
           </p>
         </div>
         
@@ -357,13 +357,14 @@ export default function OrphanPages() {
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-slate-500" />
             <Select value={threshold} onValueChange={handleThresholdChange}>
-              <SelectTrigger className="w-44">
-                <SelectValue placeholder="Match threshold" />
+              <SelectTrigger className="w-52">
+                <SelectValue placeholder="Filter pages" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="30">Below 30% match</SelectItem>
-                <SelectItem value="50">Below 50% match</SelectItem>
-                <SelectItem value="70">Below 70% match</SelectItem>
+                <SelectItem value="1">No matches at all</SelectItem>
+                <SelectItem value="30">Gaps: no good matches (&lt;30%)</SelectItem>
+                <SelectItem value="50">Poor matches (&lt;50%)</SelectItem>
+                <SelectItem value="75">Include partial matches (&lt;75%)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -388,7 +389,7 @@ export default function OrphanPages() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">{data.total}</p>
-                <p className="text-xs text-slate-500">Orphan Pages</p>
+                <p className="text-xs text-slate-500">Unmatched Pages</p>
               </div>
             </CardContent>
           </Card>
@@ -402,7 +403,7 @@ export default function OrphanPages() {
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
                   {data.orphan_pages.filter(p => p.match_status === 'no_matches').length}
                 </p>
-                <p className="text-xs text-slate-500">No Matches At All</p>
+                <p className="text-xs text-slate-500">Zero Prompt Matches</p>
               </div>
             </CardContent>
           </Card>
@@ -414,9 +415,9 @@ export default function OrphanPages() {
               </div>
               <div>
                 <p className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {data.ai_enabled ? 'Enabled' : 'Disabled'}
+                  {data.ai_enabled ? 'Available' : 'Disabled'}
                 </p>
-                <p className="text-xs text-slate-500">AI Suggestions</p>
+                <p className="text-xs text-slate-500">AI Prompt Suggestions</p>
               </div>
             </CardContent>
           </Card>
@@ -443,10 +444,10 @@ export default function OrphanPages() {
           <CardContent className="p-12 text-center">
             <FileQuestion className="w-16 h-16 text-emerald-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-2">
-              No Orphan Pages Found
+              All Content is Matched!
             </h3>
             <p className="text-slate-500 dark:text-slate-400">
-              All your pages have good matches with user prompts. Great job!
+              All your pages are being addressed by user prompts. Try a higher threshold to find pages with weak matches.
             </p>
           </CardContent>
         </Card>
