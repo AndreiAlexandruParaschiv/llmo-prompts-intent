@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     AZURE_OPENAI_ENDPOINT: Optional[str] = None
     AZURE_OPENAI_KEY: Optional[str] = None
     AZURE_API_VERSION: str = "2024-12-01-preview"
-    AZURE_COMPLETION_DEPLOYMENT: str = "gpt-4o"
+    AZURE_COMPLETION_DEPLOYMENT: str = "gpt-4.1"
     AZURE_EMBEDDING_DEPLOYMENT: Optional[str] = None  # Optional: for Azure embeddings
     
     # LLM Enhancement settings
