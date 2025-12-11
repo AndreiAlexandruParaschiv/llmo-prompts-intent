@@ -9,6 +9,7 @@ import PromptDetail from '@/pages/PromptDetail'
 import Pages from '@/pages/Pages'
 import Opportunities from '@/pages/Opportunities'
 import OrphanPages from '@/pages/OrphanPages'
+import CompetitiveAnalysis from '@/pages/CompetitiveAnalysis'
 import Import from '@/pages/Import'
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
           <Route path="prompts/:promptId" element={<PromptDetail />} />
           <Route path="pages" element={<Pages />} />
           <Route path="orphan-pages" element={<OrphanPages />} />
+          <Route path="competitive" element={<CompetitiveAnalysis />} />
           <Route path="opportunities" element={<Opportunities />} />
         </Route>
       </Routes>

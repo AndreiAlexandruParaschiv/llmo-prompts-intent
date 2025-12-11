@@ -6,6 +6,7 @@ import {
   Globe, 
   Lightbulb,
   FileQuestion,
+  Swords,
   ChevronLeft,
   ChevronRight,
   Menu,
@@ -21,6 +22,7 @@ const navigation = [
   { name: 'Prompts', href: '/prompts', icon: MessageSquareText },
   { name: 'Pages', href: '/pages', icon: Globe },
   { name: 'Unmatched Content', href: '/orphan-pages', icon: FileQuestion },
+  { name: 'Competitive', href: '/competitive', icon: Swords },
   { name: 'Opportunities', href: '/opportunities', icon: Lightbulb },
 ]
 

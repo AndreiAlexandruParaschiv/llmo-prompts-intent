@@ -287,6 +287,84 @@ export const opportunitiesApi = {
     api.post(`/opportunities/${projectId}/regenerate-suggestions/`),
 }
 
+// Competitive Analysis types
+export interface CompetitorResult {
+  url: string
+  title: string
+  snippet: string
+}
+
+export interface CompetitiveAnalysis {
+  competitive_gap: string[]
+  our_strengths: string[]
+  top_competitor: string
+  competitor_advantages: string[]
+  recommendations: Array<{
+    action: string
+    impact: string
+    effort: string
+  }>
+  content_suggestions: string
+  cta_recommendation: string
+  priority: string
+}
+
+export interface HighIntentPrompt {
+  id: string
+  text: string
+  topic: string | null
+  transaction_score: number
+  popularity_score: number | null
+  intent_label: string | null
+  match_status: string | null
+  best_match_score: number | null
+  best_match: {
+    url: string
+    title: string
+    snippet: string
+    score: number
+  } | null
+}
+
+// Competitive Analysis
+export const competitiveApi = {
+  getSummary: (projectId: string, minTransactionScore?: number) =>
+    api.get<{
+      total_high_intent: number
+      answered_high_intent: number
+      partial_high_intent: number
+      avg_transaction_score: number
+      top_topics: Array<{ topic: string; count: number }>
+    }>('/competitive/summary', {
+      params: { project_id: projectId, min_transaction_score: minTransactionScore }
+    }),
+  getHighIntentPrompts: (params: {
+    project_id: string
+    min_transaction_score?: number
+    match_status?: string
+    page?: number
+    page_size?: number
+  }) =>
+    api.get<{
+      prompts: HighIntentPrompt[]
+      total: number
+      page: number
+      page_size: number
+    }>('/competitive/high-intent-prompts', { params }),
+  analyzePrompt: (promptId: string) =>
+    api.post<{
+      prompt_id: string
+      prompt_text: string
+      transaction_score: number
+      intent_label: string | null
+      our_content: { url: string; title: string; snippet: string }
+      match_score: number
+      competitors: CompetitorResult[]
+      ai_analysis: CompetitiveAnalysis | null
+      ai_enabled: boolean
+    }>(`/competitive/analyze/${promptId}`),
+}
+
 // Jobs
 export const jobsApi = {
   getStatus: (jobId: string) => api.get(`/jobs/${jobId}`),

@@ -6,5 +6,6 @@ export { default as Prompts } from './Prompts'
 export { default as PromptDetail } from './PromptDetail'
 export { default as Pages } from './Pages'
 export { default as OrphanPages } from './OrphanPages'
+export { default as CompetitiveAnalysis } from './CompetitiveAnalysis'
 export { default as Opportunities } from './Opportunities'
 

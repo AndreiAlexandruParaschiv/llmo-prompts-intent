@@ -219,6 +219,88 @@ Analyze the gap:"""
             return None
 
 
+    def analyze_competitive_position(
+        self,
+        prompt_text: str,
+        transaction_score: float,
+        our_content: Dict[str, str],  # {url, title, snippet}
+        competitor_results: List[Dict[str, str]],  # [{url, title, snippet}, ...]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Analyze competitive position for a high-intent transactional query.
+        
+        Returns dict with:
+        - competitive_gap: What competitors offer that we don't
+        - our_strengths: What we do well
+        - recommendations: Specific actions to improve
+        - priority: high/medium/low based on transaction potential
+        """
+        if not self.enabled or not self.client:
+            return None
+        
+        our_info = f"URL: {our_content.get('url', 'N/A')}\nTitle: {our_content.get('title', 'N/A')}\nContent: {our_content.get('snippet', 'N/A')[:500]}"
+        
+        competitor_info = ""
+        for i, comp in enumerate(competitor_results[:5], 1):
+            competitor_info += f"\n{i}. {comp.get('title', 'N/A')}\n   URL: {comp.get('url', 'N/A')}\n   Snippet: {comp.get('snippet', 'N/A')[:300]}\n"
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.AZURE_COMPLETION_DEPLOYMENT,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are a competitive analysis expert. Analyze a high-intent transactional search query and compare a website's content against competitors.
+
+Focus on:
+- What features/offers competitors highlight that could win the customer
+- Pricing, promotions, or urgency tactics used
+- Trust signals and social proof
+- Call-to-action effectiveness
+- Content gaps that could lose the sale
+
+Respond with JSON only:
+{
+  "competitive_gap": ["Gap 1 - what competitors offer that we lack", "Gap 2", ...],
+  "our_strengths": ["Strength 1 - what we do well", "Strength 2", ...],
+  "top_competitor": "Name/URL of strongest competitor",
+  "competitor_advantages": ["What makes them strong", ...],
+  "recommendations": [
+    {"action": "Specific action to take", "impact": "high|medium|low", "effort": "low|medium|high"},
+    ...
+  ],
+  "content_suggestions": "Specific content/copy improvements to add",
+  "cta_recommendation": "Suggested call-to-action to increase conversion",
+  "priority": "high|medium|low"
+}"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Search Query: "{prompt_text}"
+Transaction Likelihood: {transaction_score * 100:.0f}%
+
+OUR CONTENT:
+{our_info}
+
+COMPETITOR RESULTS:
+{competitor_info}
+
+Analyze competitive position and provide actionable recommendations:"""
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=800,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            logger.debug(f"LLM competitive analysis: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Azure OpenAI competitive analysis failed: {e}")
+            return None
+
     def generate_prompt_suggestion(
         self,
         page_url: str,
