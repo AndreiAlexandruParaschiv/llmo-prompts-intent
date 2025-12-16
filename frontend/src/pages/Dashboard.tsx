@@ -97,6 +97,7 @@ function StatCard({
 }
 
 // Map raw intent values to clean display labels (comprehensive taxonomy)
+// Note: Regulatory is merged into Procedural for cleaner visualization
 const intentLabelMap: Record<string, string> = {
   // Lowercase (from backend)
   'transactional': 'Transactional',
@@ -109,7 +110,7 @@ const intentLabelMap: Record<string, string> = {
   'opinion_seeking': 'Opinion Seeking',
   'emotional': 'Emotional',
   'procedural': 'Procedural',
-  'regulatory': 'Regulatory',
+  'regulatory': 'Procedural',  // Merged into Procedural
   'brand_monitoring': 'Brand Monitoring',
   'meta': 'Meta',
   'unknown': 'Unknown',
@@ -124,7 +125,7 @@ const intentLabelMap: Record<string, string> = {
   'OPINION_SEEKING': 'Opinion Seeking',
   'EMOTIONAL': 'Emotional',
   'PROCEDURAL': 'Procedural',
-  'REGULATORY': 'Regulatory',
+  'REGULATORY': 'Procedural',  // Merged into Procedural
   'BRAND_MONITORING': 'Brand Monitoring',
   'META': 'Meta',
   'UNKNOWN': 'Unknown',
