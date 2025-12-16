@@ -17,13 +17,13 @@ import { Button } from '@/components/ui/button'
 import { useProjectStore } from '@/stores/projectStore'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Projects', href: '/projects', icon: FolderKanban },
-  { name: 'Prompts', href: '/prompts', icon: MessageSquareText },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Pages', href: '/pages', icon: Globe },
+  { name: 'Prompts', href: '/prompts', icon: MessageSquareText },
+  { name: 'Opportunities', href: '/opportunities', icon: Lightbulb },
   { name: 'Unmatched Content', href: '/orphan-pages', icon: Unlink },
   { name: 'Competitive', href: '/competitive', icon: Swords },
-  { name: 'Opportunities', href: '/opportunities', icon: Lightbulb },
 ]
 
 export default function Layout() {
