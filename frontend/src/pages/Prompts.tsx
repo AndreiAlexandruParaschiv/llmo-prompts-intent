@@ -168,6 +168,7 @@ export default function Prompts() {
   const [intent, setIntent] = useState(searchParams.get('intent_label') || 'all')
   const [matchStatus, setMatchStatus] = useState(searchParams.get('match_status') || 'all')
   const [language, setLanguage] = useState(searchParams.get('language') || 'all')
+  const [topic, setTopic] = useState(searchParams.get('topic') || 'all')
   const [page, setPage] = useState(1)
 
   // AI Reclassification state
@@ -243,7 +244,8 @@ export default function Prompts() {
       search, 
       intent, 
       matchStatus, 
-      language, 
+      language,
+      topic,
       page 
     }],
     queryFn: () => promptsApi.list({
@@ -253,6 +255,7 @@ export default function Prompts() {
       match_status: matchStatus !== 'all' && matchStatus !== 'buying_intent' ? matchStatus : undefined,
       min_transaction_score: matchStatus === 'buying_intent' ? 0.6 : undefined,
       language: language !== 'all' ? language : undefined,
+      topic: topic !== 'all' ? topic : undefined,
       page,
       page_size: 20,
     }),
@@ -284,6 +287,7 @@ export default function Prompts() {
   const total = data?.data?.total || 0
   const totalPages = data?.data?.pages || 1
   const languages = languagesData?.data?.languages || {}
+  const topics = topicsData?.data?.topics || {}
   const stats = statsData?.data
 
   return (
@@ -409,6 +413,25 @@ export default function Prompts() {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Topic filter */}
+            {Object.keys(topics).length > 0 && (
+              <Select value={topic} onValueChange={(v) => { setTopic(v); setPage(1); }}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Topic" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Topics</SelectItem>
+                  {Object.entries(topics)
+                    .sort((a, b) => (b[1] as number) - (a[1] as number))
+                    .map(([topicName, count]) => (
+                      <SelectItem key={topicName} value={topicName}>
+                        {topicName} ({count as number})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </CardContent>
       </Card>
