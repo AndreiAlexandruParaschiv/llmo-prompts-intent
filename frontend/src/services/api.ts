@@ -177,11 +177,11 @@ export const promptsApi = {
   }) => api.get<{ prompts: Prompt[]; total: number; page: number; pages: number }>('/prompts/', { params }),
   get: (id: string) => api.get<Prompt>(`/prompts/${id}`),
   getTopics: (projectId?: string) =>
-    api.get<{ topics: Record<string, number> }>('/prompts/topics/list/', {
+    api.get<{ topics: Record<string, number> }>('/prompts/topics/list', {
       params: { project_id: projectId },
     }),
   getLanguages: (projectId?: string) =>
-    api.get<{ languages: Record<string, number> }>('/prompts/languages/list/', {
+    api.get<{ languages: Record<string, number> }>('/prompts/languages/list', {
       params: { project_id: projectId },
     }),
   explainIntent: (id: string) => api.get<IntentExplanation>(`/prompts/${id}/explain-intent`),
