@@ -101,7 +101,7 @@ function PromptCard({ prompt }: { prompt: Prompt }) {
                   {prompt.intent_label}
                 </Badge>
 
-                {/* Transaction score - buying intent indicator */}
+                {/* Transaction score - transaction likelihood indicator */}
                 {prompt.transaction_score > 0 && (
                   <Badge 
                     variant="outline" 
@@ -114,7 +114,7 @@ function PromptCard({ prompt }: { prompt: Prompt }) {
                   >
                     <TrendingUp className="w-3 h-3 mr-1" />
                     {prompt.transaction_score >= 0.6 ? '🛒 ' : ''}
-                    {Math.round(prompt.transaction_score * 100)}% buying intent
+                    {Math.round(prompt.transaction_score * 100)}% Transaction Likelihood
                   </Badge>
                 )}
 
