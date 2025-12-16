@@ -23,7 +23,7 @@ const navigation = [
   { name: 'Prompts', href: '/prompts', icon: MessageSquareText },
   { name: 'Opportunities', href: '/opportunities', icon: Lightbulb },
   { name: 'Unmatched Content', href: '/orphan-pages', icon: Unlink },
-  { name: 'Competitive', href: '/competitive', icon: Swords },
+  { name: 'Competitive Analysis', href: '/competitive', icon: Swords },
 ]
 
 export default function Layout() {
