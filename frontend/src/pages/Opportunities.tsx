@@ -18,6 +18,7 @@ import {
   ArrowUpRight,
   Star,
   Sparkles,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -579,8 +580,17 @@ export default function Opportunities() {
               disabled={regenerateMutation.isPending || !!regenerateTaskId}
               className="bg-gradient-to-r from-cyan-50 to-blue-50 hover:from-cyan-100 hover:to-blue-100 border-cyan-200 dark:from-cyan-900/20 dark:to-blue-900/20 dark:border-cyan-800"
             >
-              <Sparkles className="w-4 h-4 mr-2 text-cyan-500" />
-              {regenerateTaskId ? 'Generating...' : 'Regenerate AI Suggestions'}
+              {regenerateMutation.isPending || regenerateTaskId ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin text-cyan-500" />
+                  Generating suggestions...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2 text-cyan-500" />
+                  Generate AI Suggestions
+                </>
+              )}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
