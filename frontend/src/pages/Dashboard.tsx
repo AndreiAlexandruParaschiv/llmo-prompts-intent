@@ -220,13 +220,13 @@ function IntentChart({ data }: { data: Record<string, number> }) {
   }
 
   return (
-    <div className="h-72">
+    <div className="h-80">
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
+        <PieChart margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>
           <Pie
             data={chartData}
             cx="50%"
-            cy="40%"
+            cy="42%"
             innerRadius={50}
             outerRadius={80}
             paddingAngle={2}
@@ -327,13 +327,13 @@ function MatchStatusChart({ data }: { data: Record<string, number> }) {
   }
 
   return (
-    <div className="h-72">
+    <div className="h-80">
       <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
+        <PieChart margin={{ top: 10, right: 0, bottom: 0, left: 0 }}>
           <Pie
             data={chartData}
             cx="50%"
-            cy="40%"
+            cy="42%"
             innerRadius={50}
             outerRadius={80}
             paddingAngle={2}
