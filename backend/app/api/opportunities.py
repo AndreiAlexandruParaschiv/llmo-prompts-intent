@@ -234,6 +234,68 @@ async def update_opportunity(
     )
 
 
+@router.post("/{opportunity_id}/generate-suggestion", response_model=OpportunityResponse)
+async def generate_opportunity_suggestion(
+    opportunity_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate AI content suggestion for a single opportunity."""
+    from app.services.azure_openai import AzureOpenAIService
+    
+    # Get opportunity with prompt
+    result = await db.execute(
+        select(Opportunity, Prompt)
+        .join(Prompt)
+        .where(Opportunity.id == opportunity_id)
+    )
+    row = result.first()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    
+    opp, prompt = row
+    
+    # Generate AI suggestion
+    azure_service = AzureOpenAIService()
+    suggestion = azure_service.generate_content_suggestion(
+        prompt_text=prompt.raw_text,
+        intent=prompt.intent_label.value if prompt.intent_label else "informational",
+        match_status=opp.recommended_action.value if opp.recommended_action else "create_content",
+        existing_content_snippets=None
+    )
+    
+    if suggestion:
+        opp.content_suggestion = suggestion
+        await db.commit()
+        await db.refresh(opp)
+        logger.info(f"Generated AI suggestion for opportunity {opportunity_id}")
+    else:
+        logger.warning(f"Failed to generate AI suggestion for opportunity {opportunity_id}")
+    
+    return OpportunityResponse(
+        id=opp.id,
+        prompt_id=opp.prompt_id,
+        priority_score=safe_float(opp.priority_score) or 0.0,
+        difficulty_score=safe_float(opp.difficulty_score),
+        difficulty_factors=opp.difficulty_factors or {},
+        recommended_action=opp.recommended_action.value if opp.recommended_action else "other",
+        reason=opp.reason,
+        status=opp.status.value if opp.status else "new",
+        assigned_to=opp.assigned_to,
+        notes=opp.notes,
+        content_suggestion=opp.content_suggestion or {},
+        related_page_ids=opp.related_page_ids or [],
+        created_at=opp.created_at,
+        updated_at=opp.updated_at,
+        prompt_text=prompt.raw_text,
+        prompt_topic=prompt.topic,
+        prompt_intent=prompt.intent_label.value if prompt.intent_label else None,
+        prompt_transaction_score=safe_float(prompt.transaction_score),
+        prompt_popularity_score=safe_float(prompt.popularity_score),
+        prompt_sentiment_score=safe_float(prompt.sentiment_score),
+    )
+
+
 @router.get("/export/csv")
 async def export_opportunities_csv(
     project_id: UUID,

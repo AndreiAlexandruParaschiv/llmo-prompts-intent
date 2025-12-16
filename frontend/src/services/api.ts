@@ -285,6 +285,8 @@ export const opportunitiesApi = {
     api.get(`/opportunities/export/json`, { params: { project_id: projectId }, responseType: 'blob' }),
   regenerateSuggestions: (projectId: string) =>
     api.post(`/opportunities/${projectId}/regenerate-suggestions/`),
+  generateSuggestion: (opportunityId: string) =>
+    api.post<Opportunity>(`/opportunities/${opportunityId}/generate-suggestion`),
 }
 
 // Competitive Analysis types

@@ -89,13 +89,43 @@ const actionConfig = {
 function OpportunityCard({ 
   opportunity, 
   onStatusChange,
+  onSuggestionGenerated,
 }: { 
   opportunity: Opportunity
   onStatusChange: (id: string, status: string) => void
+  onSuggestionGenerated: () => void
 }) {
   const [showRelatedPages, setShowRelatedPages] = useState(false)
   const [relatedPages, setRelatedPages] = useState<Array<{ id: string; url: string; title?: string }>>([])
   const [loadingPages, setLoadingPages] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const { toast } = useToast()
+  
+  const hasSuggestions = opportunity.content_suggestion && Object.keys(opportunity.content_suggestion).length > 0
+  
+  const handleGenerateSuggestions = async () => {
+    if (hasSuggestions) {
+      setShowSuggestions(true)
+      return
+    }
+    
+    setIsGenerating(true)
+    try {
+      await opportunitiesApi.generateSuggestion(opportunity.id)
+      onSuggestionGenerated()
+      setShowSuggestions(true)
+      toast({ title: 'AI suggestion generated successfully' })
+    } catch (error) {
+      toast({ 
+        title: 'Failed to generate suggestion', 
+        description: (error as Error).message,
+        variant: 'destructive' 
+      })
+    } finally {
+      setIsGenerating(false)
+    }
+  }
   
   const handleToggleRelatedPages = async () => {
     if (!showRelatedPages && relatedPages.length === 0 && opportunity.related_page_ids?.length) {
@@ -227,69 +257,101 @@ function OpportunityCard({
             )}
 
             {/* AI Content Suggestion */}
-            {opportunity.content_suggestion && Object.keys(opportunity.content_suggestion).length > 0 && (
-              <div className="mt-3 p-3 bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
-                <div className="flex items-center gap-2 mb-2">
-                  <Sparkles className="w-4 h-4 text-cyan-500" />
-                  <span className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">AI Content Recommendation</span>
-                </div>
-                
-                {/* Suggested Title */}
-                {opportunity.content_suggestion.title && (
-                  <p className="text-sm font-medium text-slate-900 dark:text-white mb-2">
-                    📝 {opportunity.content_suggestion.title}
-                  </p>
-                )}
-
-                {/* Content Type & CTA */}
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {opportunity.content_suggestion.content_type && (
-                    <Badge variant="outline" className="text-xs bg-white dark:bg-slate-800">
-                      {opportunity.content_suggestion.content_type}
-                    </Badge>
-                  )}
-                  {opportunity.content_suggestion.cta_suggestion && (
-                    <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200">
-                      CTA: {opportunity.content_suggestion.cta_suggestion}
-                    </Badge>
-                  )}
-                </div>
-
-                {/* Outline */}
-                {opportunity.content_suggestion.outline && opportunity.content_suggestion.outline.length > 0 && (
-                  <div className="mb-2">
-                    <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Key Points:</p>
-                    <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
-                      {opportunity.content_suggestion.outline.map((point: string, i: number) => (
-                        <li key={i} className="flex items-start gap-1">
-                          <span className="text-cyan-500">•</span>
-                          {point}
-                        </li>
-                      ))}
-                    </ul>
+            <div className="mt-3">
+              {showSuggestions && hasSuggestions ? (
+                <div className="p-3 bg-gradient-to-r from-cyan-50 to-blue-50 dark:from-cyan-900/20 dark:to-blue-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-cyan-500" />
+                      <span className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">AI Content Recommendation</span>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setShowSuggestions(false)}
+                      className="h-6 px-2 text-xs text-slate-500 hover:text-slate-700"
+                    >
+                      Hide
+                    </Button>
                   </div>
-                )}
+                  
+                  {/* Suggested Title */}
+                  {opportunity.content_suggestion?.title && (
+                    <p className="text-sm font-medium text-slate-900 dark:text-white mb-2">
+                      📝 {opportunity.content_suggestion.title}
+                    </p>
+                  )}
 
-                {/* SEO Keywords */}
-                {opportunity.content_suggestion.seo_keywords && opportunity.content_suggestion.seo_keywords.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    <span className="text-xs text-slate-500">Keywords:</span>
-                    {opportunity.content_suggestion.seo_keywords.slice(0, 5).map((kw: string, i: number) => (
-                      <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">
-                        {kw}
+                  {/* Content Type & CTA */}
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {opportunity.content_suggestion?.content_type && (
+                      <Badge variant="outline" className="text-xs bg-white dark:bg-slate-800">
+                        {opportunity.content_suggestion.content_type}
                       </Badge>
-                    ))}
+                    )}
+                    {opportunity.content_suggestion?.cta_suggestion && (
+                      <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200">
+                        CTA: {opportunity.content_suggestion.cta_suggestion}
+                      </Badge>
+                    )}
                   </div>
-                )}
 
-                {/* Priority Reason */}
-                {opportunity.content_suggestion.priority_reason && (
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
-                    💡 {opportunity.content_suggestion.priority_reason}
-                  </p>
-                )}
-              </div>
-            )}
+                  {/* Outline */}
+                  {opportunity.content_suggestion?.outline && opportunity.content_suggestion.outline.length > 0 && (
+                    <div className="mb-2">
+                      <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Key Points:</p>
+                      <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
+                        {opportunity.content_suggestion.outline.map((point: string, i: number) => (
+                          <li key={i} className="flex items-start gap-1">
+                            <span className="text-cyan-500">•</span>
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* SEO Keywords */}
+                  {opportunity.content_suggestion?.seo_keywords && opportunity.content_suggestion.seo_keywords.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      <span className="text-xs text-slate-500">Keywords:</span>
+                      {opportunity.content_suggestion.seo_keywords.slice(0, 5).map((kw: string, i: number) => (
+                        <Badge key={i} variant="secondary" className="text-[10px] px-1.5 py-0">
+                          {kw}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Priority Reason */}
+                  {opportunity.content_suggestion?.priority_reason && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 italic">
+                      💡 {opportunity.content_suggestion.priority_reason}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateSuggestions}
+                  disabled={isGenerating}
+                  className="w-full bg-gradient-to-r from-cyan-50 to-blue-50 hover:from-cyan-100 hover:to-blue-100 border-cyan-200 dark:from-cyan-900/20 dark:to-blue-900/20 dark:border-cyan-800"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin text-cyan-500" />
+                      Generating suggestions...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2 text-cyan-500" />
+                      {hasSuggestions ? 'Show AI Suggestions' : 'Generate AI Suggestions'}
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
 
             {/* Related pages */}
             {opportunity.related_page_ids && opportunity.related_page_ids.length > 0 && (
@@ -767,6 +829,7 @@ export default function Opportunities() {
               key={opportunity.id} 
               opportunity={opportunity}
               onStatusChange={(id, status) => updateMutation.mutate({ id, status })}
+              onSuggestionGenerated={() => queryClient.invalidateQueries({ queryKey: ['opportunities'] })}
             />
           ))}
         </div>
