@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Sparkles,
   Zap,
+  Tag,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -134,7 +135,8 @@ function PromptCard({ prompt }: { prompt: Prompt }) {
 
                 {/* Topic */}
                 {prompt.topic && (
-                  <Badge variant="secondary" className="text-xs">
+                  <Badge variant="outline" className="text-xs bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-700">
+                    <Tag className="w-3 h-3 mr-1" />
                     {prompt.topic}
                   </Badge>
                 )}
