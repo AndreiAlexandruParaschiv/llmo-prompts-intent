@@ -19,6 +19,19 @@ class PromptCreate(BaseModel):
     extra_data: Dict[str, Any] = Field(default_factory=dict)
 
 
+class CWVAssessment(BaseModel):
+    """Schema for Core Web Vitals assessment."""
+    
+    status: str  # "passed", "failed", "unknown"
+    performance_score: Optional[int] = None
+    has_data: bool = False
+    message: Optional[str] = None
+    # Individual metric status
+    lcp_ok: Optional[bool] = None
+    inp_ok: Optional[bool] = None
+    cls_ok: Optional[bool] = None
+
+
 class PromptMatchInfo(BaseModel):
     """Schema for prompt match information."""
     
@@ -64,6 +77,7 @@ class PromptResponse(BaseModel):
     # Related data (optional)
     matches: Optional[List[PromptMatchInfo]] = None
     opportunity: Optional[Dict[str, Any]] = None
+    cwv_assessment: Optional[CWVAssessment] = None
     
     class Config:
         from_attributes = True

@@ -62,3 +62,25 @@ class PageListResponse(BaseModel):
     page: int
     page_size: int
 
+
+class CandidatePrompt(BaseModel):
+    """Schema for a single candidate prompt."""
+    
+    text: str
+    transaction_score: float
+    intent: str
+    reasoning: str
+    target_audience: str
+    citation_trigger: Optional[str] = None
+
+
+class CandidatePromptsResponse(BaseModel):
+    """Schema for candidate prompts response."""
+    
+    page_id: UUID
+    page_url: str
+    page_title: Optional[str]
+    prompts: List[CandidatePrompt]
+    generated_at: Optional[str] = None
+    cached: bool = False
+

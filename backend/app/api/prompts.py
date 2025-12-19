@@ -14,7 +14,8 @@ from app.models.csv_import import CSVImport
 from app.models.match import Match
 from app.models.page import Page
 from app.models.opportunity import Opportunity
-from app.schemas.prompt import PromptResponse, PromptListResponse, PromptMatchInfo
+from app.schemas.prompt import PromptResponse, PromptListResponse, PromptMatchInfo, CWVAssessment
+from app.services.cwv import cwv_service
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -106,6 +107,30 @@ async def list_prompts(
     result = await db.execute(query)
     prompts = result.scalars().all()
     
+    # Get CWV assessment for best matching pages
+    prompt_ids = [p.id for p in prompts]
+    cwv_assessments = {}
+    
+    if prompt_ids:
+        # Get best match for each prompt with page CWV data
+        for p in prompts:
+            if p.match_status and p.match_status.value != "pending":
+                # Get best matching page
+                best_match_result = await db.execute(
+                    select(Match, Page)
+                    .join(Page)
+                    .where(Match.prompt_id == p.id)
+                    .order_by(Match.similarity_score.desc())
+                    .limit(1)
+                )
+                best_match = best_match_result.first()
+                
+                if best_match:
+                    _, matched_page = best_match
+                    if matched_page.cwv_data:
+                        assessment = cwv_service.calculate_assessment(matched_page.cwv_data)
+                        cwv_assessments[p.id] = CWVAssessment(**assessment)
+    
     # Build response
     response_prompts = [
         PromptResponse(
@@ -126,6 +151,7 @@ async def list_prompts(
             extra_data=p.extra_data or {},
             created_at=p.created_at,
             updated_at=p.updated_at,
+            cwv_assessment=cwv_assessments.get(p.id),
         )
         for p in prompts
     ]

@@ -54,6 +54,7 @@ export interface Prompt {
   created_at: string
   matches?: PromptMatch[]
   opportunity?: Record<string, unknown>
+  cwv_assessment?: CWVAssessment
 }
 
 export interface PromptMatch {
@@ -211,6 +212,25 @@ export interface OrphanPage {
   ai_suggestion?: OrphanPageSuggestion
 }
 
+// Candidate Prompts types
+export interface CandidatePrompt {
+  text: string
+  transaction_score: number
+  intent: string
+  reasoning: string
+  target_audience: string
+  citation_trigger?: string
+}
+
+export interface CandidatePromptsResponse {
+  page_id: string
+  page_url: string
+  page_title: string | null
+  prompts: CandidatePrompt[]
+  generated_at: string | null
+  cached: boolean
+}
+
 // Pages
 export const pagesApi = {
   list: (params: { project_id?: string; search?: string; filter_type?: string; page?: number; page_size?: number }) =>
@@ -257,6 +277,10 @@ export const pagesApi = {
       title: string
       suggestion: OrphanPageSuggestion
     }>(`/pages/orphan-pages/${pageId}/generate-suggestions`),
+  getCandidatePrompts: (pageId: string, regenerate?: boolean, numPrompts?: number) =>
+    api.get<CandidatePromptsResponse>(`/pages/${pageId}/candidate-prompts`, {
+      params: { regenerate, num_prompts: numPrompts }
+    }),
 }
 
 // Opportunities
@@ -373,6 +397,68 @@ export const competitiveApi = {
 export const jobsApi = {
   getStatus: (jobId: string) => api.get(`/jobs/${jobId}`),
   cancel: (jobId: string) => api.delete(`/jobs/${jobId}`),
+}
+
+// CWV Assessment types
+export interface CWVAssessment {
+  status: 'passed' | 'failed' | 'partial' | 'unknown'
+  performance_score: number | null
+  has_data: boolean
+  message: string | null
+  lcp_ok: boolean | null
+  inp_ok: boolean | null
+  cls_ok: boolean | null
+}
+
+// Core Web Vitals types
+export interface CWVMetrics {
+  lcp: number | null  // Largest Contentful Paint (ms)
+  lcp_score: 'good' | 'needs-improvement' | 'poor' | null
+  fid: number | null  // First Input Delay (ms)
+  fid_score: 'good' | 'needs-improvement' | 'poor' | null
+  inp: number | null  // Interaction to Next Paint (ms)
+  inp_score: 'good' | 'needs-improvement' | 'poor' | null
+  cls: number | null  // Cumulative Layout Shift
+  cls_score: 'good' | 'needs-improvement' | 'poor' | null
+  fcp: number | null  // First Contentful Paint (ms)
+  fcp_score: 'good' | 'needs-improvement' | 'poor' | null
+  ttfb: number | null  // Time to First Byte (ms)
+  ttfb_score: 'good' | 'needs-improvement' | 'poor' | null
+  performance_score: number | null  // 0-100
+  has_field_data: boolean
+  error: string | null
+  fetched_at?: string
+  strategy?: string
+}
+
+export interface CWVPageResult {
+  page_id: string
+  url: string
+  title: string | null
+  similarity_score: number
+  cached: boolean
+  cwv: CWVMetrics
+}
+
+// Core Web Vitals API
+export const cwvApi = {
+  getForPage: (pageId: string, refresh?: boolean, strategy?: string) =>
+    api.get<{ page_id: string; url: string; cached: boolean; cwv: CWVMetrics }>(
+      `/cwv/page/${pageId}`,
+      { params: { refresh, strategy } }
+    ),
+  getForUrl: (url: string, strategy?: string) =>
+    api.get<{ url: string; cwv: CWVMetrics }>(
+      '/cwv/url',
+      { params: { url, strategy } }
+    ),
+  getForPrompt: (promptId: string, refresh?: boolean, strategy?: string, limit?: number) =>
+    api.get<{ prompt_id: string; matches: CWVPageResult[] }>(
+      `/cwv/prompt/${promptId}`,
+      { params: { refresh, strategy, limit: limit || 2 } }
+    ),
+  getStatus: () =>
+    api.get<{ enabled: boolean; api_configured: boolean; message: string }>('/cwv/status'),
 }
 
 export default api

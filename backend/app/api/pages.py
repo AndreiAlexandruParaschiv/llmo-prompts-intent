@@ -12,7 +12,7 @@ from app.core.logging import get_logger
 from app.models.page import Page
 from app.models.match import Match
 from app.models.crawl_job import CrawlJob, CrawlStatus
-from app.schemas.page import PageResponse, PageListResponse
+from app.schemas.page import PageResponse, PageListResponse, CandidatePromptsResponse, CandidatePrompt
 from app.services.azure_openai import azure_openai_service
 from datetime import datetime
 
@@ -395,6 +395,90 @@ async def generate_orphan_page_suggestions(
         "title": page.title,
         "suggestion": suggestion,
     }
+
+
+@router.get("/{page_id}/candidate-prompts", response_model=CandidatePromptsResponse)
+async def get_candidate_prompts(
+    page_id: UUID,
+    regenerate: bool = Query(False, description="Force regeneration even if cached"),
+    num_prompts: int = Query(5, ge=1, le=10, description="Number of prompts to generate"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate or retrieve candidate prompts for a page.
+    
+    These are high-impact, transactional prompts that would make LLMs cite this page.
+    Results are cached in the database for performance.
+    """
+    page = await db.get(Page, page_id)
+    if not page:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    # Check for cached results
+    if not regenerate and page.candidate_prompts:
+        cached_data = page.candidate_prompts
+        prompts = []
+        for p in cached_data.get("prompts", []):
+            prompts.append(CandidatePrompt(
+                text=p.get("text", ""),
+                transaction_score=p.get("transaction_score", 0.0),
+                intent=p.get("intent", "unknown"),
+                reasoning=p.get("reasoning", ""),
+                target_audience=p.get("target_audience", ""),
+                citation_trigger=p.get("citation_trigger"),
+            ))
+        
+        return CandidatePromptsResponse(
+            page_id=page.id,
+            page_url=page.url,
+            page_title=page.title,
+            prompts=prompts,
+            generated_at=cached_data.get("generated_at"),
+            cached=True,
+        )
+    
+    # Generate new candidate prompts
+    if not azure_openai_service.enabled:
+        raise HTTPException(
+            status_code=400, 
+            detail="AI service not available. Configure Azure OpenAI to generate candidate prompts."
+        )
+    
+    result = azure_openai_service.generate_candidate_prompts(
+        page_url=page.url,
+        page_title=page.title or "",
+        page_content=page.content or "",
+        meta_description=page.meta_description,
+        num_prompts=num_prompts,
+    )
+    
+    if not result:
+        raise HTTPException(status_code=500, detail="Failed to generate candidate prompts")
+    
+    # Cache the results
+    page.candidate_prompts = result
+    await db.commit()
+    
+    # Parse prompts
+    prompts = []
+    for p in result.get("prompts", []):
+        prompts.append(CandidatePrompt(
+            text=p.get("text", ""),
+            transaction_score=p.get("transaction_score", 0.0),
+            intent=p.get("intent", "unknown"),
+            reasoning=p.get("reasoning", ""),
+            target_audience=p.get("target_audience", ""),
+            citation_trigger=p.get("citation_trigger"),
+        ))
+    
+    return CandidatePromptsResponse(
+        page_id=page.id,
+        page_url=page.url,
+        page_title=page.title,
+        prompts=prompts,
+        generated_at=result.get("generated_at"),
+        cached=False,
+    )
 
 
 # Dynamic routes with {page_id} must come AFTER static routes like /orphan-pages

@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -19,13 +20,21 @@ import {
   Zap,
   Info,
   Hash,
+  Gauge,
+  RefreshCw,
+  Loader2,
+  Activity,
+  Wand2,
+  DollarSign,
+  Users,
+  Quote,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
-import { promptsApi, Prompt, PromptMatch, IntentExplanation } from '@/services/api'
+import { promptsApi, cwvApi, pagesApi, Prompt, PromptMatch, IntentExplanation, CWVPageResult, CWVMetrics, CandidatePrompt, CandidatePromptsResponse } from '@/services/api'
 import { cn } from '@/lib/utils'
 
 const intentColors: Record<string, string> = {
@@ -128,8 +137,253 @@ function MatchCard({ match }: { match: PromptMatch }) {
   )
 }
 
+// CWV Score Badge Component
+function CWVScoreBadge({ score, label }: { score: string | null; label: string }) {
+  if (!score) return <span className="text-xs text-slate-400">N/A</span>
+  
+  const colorClass = 
+    score === 'good' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+    score === 'needs-improvement' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' :
+    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+  
+  return (
+    <Badge className={cn("text-[10px] capitalize", colorClass)}>
+      {label}: {score.replace('-', ' ')}
+    </Badge>
+  )
+}
+
+// CWV Metric Row Component
+function CWVMetricRow({ 
+  name, 
+  value, 
+  score, 
+  unit = 'ms',
+  description 
+}: { 
+  name: string
+  value: number | null
+  score: string | null
+  unit?: string
+  description: string
+}) {
+  const scoreColor = 
+    score === 'good' ? 'text-emerald-500' :
+    score === 'needs-improvement' ? 'text-amber-500' :
+    score === 'poor' ? 'text-red-500' : 'text-slate-400'
+
+  return (
+    <div className="flex items-center justify-between py-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+      <div className="flex-1">
+        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{name}</p>
+        <p className="text-[10px] text-slate-400">{description}</p>
+      </div>
+      <div className="text-right">
+        {value !== null ? (
+          <span className={cn("text-sm font-bold", scoreColor)}>
+            {unit === 'ms' ? `${Math.round(value)}ms` : value.toFixed(3)}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-400">N/A</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// CWV Card Component
+function CWVCard({ cwvData, url, title, isLoading }: { 
+  cwvData: CWVMetrics | null
+  url: string
+  title: string | null
+  isLoading: boolean
+}) {
+  if (isLoading) {
+    return (
+      <Card className="border-slate-200 dark:border-slate-800">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 animate-spin text-violet-500" />
+            <div>
+              <p className="text-sm text-slate-700 dark:text-slate-300">Fetching Core Web Vitals...</p>
+              <p className="text-xs text-slate-400 truncate max-w-md">{url}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!cwvData) return null
+
+  if (cwvData.error) {
+    return (
+      <Card className="border-slate-200 dark:border-slate-800 border-l-4 border-l-red-400">
+        <CardContent className="p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {title || url}
+              </p>
+              <p className="text-xs text-red-500 mt-1">{cwvData.error}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card className="border-slate-200 dark:border-slate-800">
+      <CardContent className="p-4">
+        {/* Header with URL and Performance Score */}
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div className="flex-1 min-w-0">
+            <a 
+              href={url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-sm font-medium text-cyan-600 dark:text-cyan-400 hover:underline flex items-center gap-1"
+            >
+              {title || url}
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <div className="flex flex-wrap gap-1 mt-2">
+              <CWVScoreBadge score={cwvData.lcp_score} label="LCP" />
+              <CWVScoreBadge score={cwvData.cls_score} label="CLS" />
+              <CWVScoreBadge score={cwvData.inp_score || cwvData.fid_score} label="INP" />
+            </div>
+          </div>
+          {cwvData.performance_score !== null && (
+            <div className="text-center flex-shrink-0">
+              <div className={cn(
+                "w-14 h-14 rounded-full flex items-center justify-center font-bold text-lg",
+                cwvData.performance_score >= 90 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                cwvData.performance_score >= 50 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+              )}>
+                {cwvData.performance_score}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">Score</p>
+            </div>
+          )}
+        </div>
+
+        {/* Metrics */}
+        <div className="space-y-0">
+          <CWVMetricRow 
+            name="LCP" 
+            value={cwvData.lcp} 
+            score={cwvData.lcp_score}
+            description="Largest Contentful Paint"
+          />
+          <CWVMetricRow 
+            name="CLS" 
+            value={cwvData.cls} 
+            score={cwvData.cls_score}
+            unit=""
+            description="Cumulative Layout Shift"
+          />
+          <CWVMetricRow 
+            name="INP" 
+            value={cwvData.inp || cwvData.fid} 
+            score={cwvData.inp_score || cwvData.fid_score}
+            description="Interaction to Next Paint"
+          />
+          <CWVMetricRow 
+            name="FCP" 
+            value={cwvData.fcp} 
+            score={cwvData.fcp_score}
+            description="First Contentful Paint"
+          />
+          <CWVMetricRow 
+            name="TTFB" 
+            value={cwvData.ttfb} 
+            score={cwvData.ttfb_score}
+            description="Time to First Byte"
+          />
+        </div>
+
+        {/* Data source indicator */}
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <span className="text-[10px] text-slate-400">
+            {cwvData.has_field_data ? '📊 Real user data (CrUX)' : '🧪 Lab data (Lighthouse)'}
+          </span>
+          {cwvData.fetched_at && (
+            <span className="text-[10px] text-slate-400">
+              {new Date(cwvData.fetched_at).toLocaleString()}
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Candidate Prompt Card Component
+function CandidatePromptCard({ prompt, index }: { prompt: CandidatePrompt; index: number }) {
+  const intentColor = intentColors[prompt.intent] || intentColors.unknown
+  
+  return (
+    <Card className="border-slate-200 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors">
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+            {index + 1}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-slate-900 dark:text-white mb-2">
+              "{prompt.text}"
+            </p>
+            
+            <div className="flex flex-wrap gap-2 mb-3">
+              <Badge className={cn("text-xs capitalize", intentColor)}>
+                {prompt.intent}
+              </Badge>
+              <Badge 
+                variant="outline" 
+                className={cn(
+                  "text-xs",
+                  prompt.transaction_score >= 0.7 ? "border-emerald-300 text-emerald-600 dark:text-emerald-400" :
+                  prompt.transaction_score >= 0.4 ? "border-amber-300 text-amber-600 dark:text-amber-400" : 
+                  "border-slate-300 text-slate-500"
+                )}
+              >
+                <DollarSign className="w-3 h-3 mr-1" />
+                {Math.round(prompt.transaction_score * 100)}% transaction
+              </Badge>
+            </div>
+            
+            <div className="space-y-2 text-xs text-slate-500">
+              <div className="flex items-start gap-2">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <span>{prompt.reasoning}</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Users className="w-3.5 h-3.5 text-violet-500 flex-shrink-0 mt-0.5" />
+                <span>{prompt.target_audience}</span>
+              </div>
+              {prompt.citation_trigger && (
+                <div className="flex items-start gap-2">
+                  <Quote className="w-3.5 h-3.5 text-cyan-500 flex-shrink-0 mt-0.5" />
+                  <span className="italic">{prompt.citation_trigger}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function PromptDetail() {
   const { promptId } = useParams<{ promptId: string }>()
+  const [showCWV, setShowCWV] = useState(false)
+  const [showCandidatePrompts, setShowCandidatePrompts] = useState(false)
+  const [forceRegenerate, setForceRegenerate] = useState(false)
+  const [forceRefreshCWV, setForceRefreshCWV] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['prompt', promptId],
@@ -144,8 +398,53 @@ export default function PromptDetail() {
     enabled: !!promptId,
   })
 
+  // Fetch CWV data for matched pages
+  const { data: cwvData, isLoading: cwvLoading, isFetching: cwvFetching } = useQuery({
+    queryKey: ['prompt-cwv', promptId, forceRefreshCWV],
+    queryFn: () => cwvApi.getForPrompt(promptId!, forceRefreshCWV),
+    enabled: !!promptId && showCWV,
+  })
+
+  // Reset the refresh flag after fetch completes
+  useEffect(() => {
+    if (forceRefreshCWV && !cwvFetching) {
+      setForceRefreshCWV(false)
+    }
+  }, [forceRefreshCWV, cwvFetching])
+
+  // Function to trigger CWV refresh
+  const handleRefreshCWV = () => {
+    setForceRefreshCWV(true)
+  }
+
   const prompt = data?.data as Prompt | undefined
+  const bestMatchPageId = prompt?.matches?.[0]?.page_id
+
+  // Fetch candidate prompts for best matched page
+  const { 
+    data: candidatePromptsData, 
+    isLoading: candidatePromptsLoading,
+    isFetching: candidatePromptsFetching,
+  } = useQuery({
+    queryKey: ['candidate-prompts', bestMatchPageId, forceRegenerate],
+    queryFn: () => pagesApi.getCandidatePrompts(bestMatchPageId!, forceRegenerate),
+    enabled: !!bestMatchPageId && showCandidatePrompts,
+  })
+
+  // Reset the regenerate flag after fetch completes
+  useEffect(() => {
+    if (forceRegenerate && !candidatePromptsFetching) {
+      setForceRegenerate(false)
+    }
+  }, [forceRegenerate, candidatePromptsFetching])
+
+  // Function to trigger regeneration
+  const handleRegenerateCandidatePrompts = () => {
+    setForceRegenerate(true)
+  }
   const intentExplanation = intentData?.data as IntentExplanation | undefined
+  const cwvResults = cwvData?.data?.matches as CWVPageResult[] | undefined
+  const candidatePrompts = candidatePromptsData?.data as CandidatePromptsResponse | undefined
 
   if (isLoading) {
     return (
@@ -500,6 +799,174 @@ export default function PromptDetail() {
               )}
             </CardContent>
           </Card>
+
+          {/* Candidate Prompts Section */}
+          {prompt.matches && prompt.matches.length > 0 && (
+            <Card className="border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-500">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wand2 className="w-4 h-4 text-emerald-500" />
+                    Candidate Prompts
+                  </div>
+                  <Button 
+                    variant={showCandidatePrompts ? "secondary" : "default"}
+                    size="sm"
+                    onClick={() => setShowCandidatePrompts(!showCandidatePrompts)}
+                    className={cn(
+                      "text-xs h-7",
+                      !showCandidatePrompts && "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
+                    )}
+                  >
+                    {showCandidatePrompts ? 'Hide' : 'Generate'}
+                  </Button>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  AI-generated prompts for LLM citations
+                </CardDescription>
+              </CardHeader>
+              {showCandidatePrompts && (
+                <CardContent className="pt-0 space-y-3">
+                  {candidatePromptsLoading || candidatePromptsFetching ? (
+                    <div className="flex items-center gap-2 py-4">
+                      <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
+                      <span className="text-xs text-slate-500">Generating...</span>
+                    </div>
+                  ) : candidatePrompts && candidatePrompts.prompts.length > 0 ? (
+                    <div className="space-y-2">
+                      {candidatePrompts.prompts.map((cp, i) => (
+                        <div 
+                          key={i} 
+                          className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
+                        >
+                          <p className="text-xs text-slate-700 dark:text-slate-300 mb-1.5">
+                            "{cp.text}"
+                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <Badge 
+                              variant="outline" 
+                              className={cn(
+                                "text-[10px] px-1.5 py-0",
+                                cp.transaction_score >= 0.7 ? "border-emerald-300 text-emerald-600" :
+                                cp.transaction_score >= 0.4 ? "border-amber-300 text-amber-600" : 
+                                "border-slate-300 text-slate-500"
+                              )}
+                            >
+                              {Math.round(cp.transaction_score * 100)}%
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize">
+                              {cp.intent}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="w-full text-xs h-7"
+                        onClick={handleRegenerateCandidatePrompts}
+                        disabled={candidatePromptsFetching}
+                      >
+                        <RefreshCw className={cn("w-3 h-3 mr-1", candidatePromptsFetching && "animate-spin")} />
+                        Regenerate
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 text-center py-4">
+                      No prompts generated
+                    </p>
+                  )}
+                </CardContent>
+              )}
+            </Card>
+          )}
+
+          {/* Core Web Vitals Section */}
+          {prompt.matches && prompt.matches.length > 0 && (
+            <Card className="border-slate-200 dark:border-slate-800 border-l-4 border-l-violet-500">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Gauge className="w-4 h-4 text-violet-500" />
+                    Core Web Vitals
+                  </div>
+                  <Button 
+                    variant={showCWV ? "secondary" : "default"}
+                    size="sm"
+                    onClick={() => setShowCWV(!showCWV)}
+                    className={cn(
+                      "text-xs h-7",
+                      !showCWV && "bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600"
+                    )}
+                  >
+                    {showCWV ? 'Hide' : 'Analyze'}
+                  </Button>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  PageSpeed Insights metrics
+                </CardDescription>
+              </CardHeader>
+              {showCWV && (
+                <CardContent className="pt-0 space-y-3">
+                  {cwvLoading || cwvFetching ? (
+                    <div className="flex items-center gap-2 py-4">
+                      <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
+                      <span className="text-xs text-slate-500">Fetching CWV...</span>
+                    </div>
+                  ) : cwvResults && cwvResults.length > 0 ? (
+                    <div className="space-y-2">
+                      {cwvResults.slice(0, 2).map((result, i) => (
+                        <div 
+                          key={i} 
+                          className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700"
+                        >
+                          <a 
+                            href={result.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-cyan-600 dark:text-cyan-400 hover:underline truncate block mb-1.5"
+                          >
+                            {result.title || result.url}
+                          </a>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {result.cwv.performance_score !== null && (
+                              <Badge 
+                                variant="outline" 
+                                className={cn(
+                                  "text-[10px] px-1.5 py-0",
+                                  result.cwv.performance_score >= 90 ? "border-emerald-300 text-emerald-600" :
+                                  result.cwv.performance_score >= 50 ? "border-amber-300 text-amber-600" : 
+                                  "border-red-300 text-red-600"
+                                )}
+                              >
+                                Score: {result.cwv.performance_score}
+                              </Badge>
+                            )}
+                            <CWVScoreBadge score={result.cwv.lcp_score} label="LCP" />
+                            <CWVScoreBadge score={result.cwv.cls_score} label="CLS" />
+                          </div>
+                        </div>
+                      ))}
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="w-full text-xs h-7"
+                        onClick={handleRefreshCWV}
+                        disabled={cwvFetching}
+                      >
+                        <RefreshCw className={cn("w-3 h-3 mr-1", cwvFetching && "animate-spin")} />
+                        Refresh
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 text-center py-4">
+                      No CWV data available
+                    </p>
+                  )}
+                </CardContent>
+              )}
+            </Card>
+          )}
         </div>
       </div>
     </div>

@@ -142,6 +142,20 @@ Prompt,Topic,Region,Popularity,Sentiment
 - **Content Audit**: Identify content that may need promotion or repurposing
 - **Threshold Filtering**: Adjust match threshold to find low-performing content
 
+### 🎯 Candidate Prompts Generator
+- **AI-Generated Prompts**: Generate high-impact prompts that would make LLMs cite your pages
+- **Transaction Focus**: Prioritizes prompts with commercial/transactional intent
+- **Citation Triggers**: Shows what specific content would be cited by LLMs
+- **Target Audience**: Identifies who would ask each question
+- **Cached Results**: Results are cached for performance, with regeneration option
+
+### ⚡ Core Web Vitals (CWV) Analysis
+- **PageSpeed Insights Integration**: Fetch real performance metrics from Google
+- **Key Metrics**: LCP, CLS, INP, FCP, TTFB scores
+- **Performance Score**: Overall Lighthouse performance score (0-100)
+- **Pass/Fail Assessment**: Quick view of CWV status for matched pages
+- **Field Data**: Shows real user data from Chrome UX Report when available
+
 ---
 
 ## 🔧 Configuration
@@ -157,6 +171,7 @@ See `.env.example` for all available options. Key settings:
 | `AZURE_OPENAI_ENDPOINT` | Your AI endpoint URL | For AI features |
 | `AZURE_OPENAI_KEY` | Your AI API key | For AI features |
 | `AZURE_COMPLETION_DEPLOYMENT` | AI model deployment name | For AI features |
+| `GOOGLE_PAGESPEED_API_KEY` | Google PageSpeed Insights API key | For CWV analysis |
 
 > **Note:** Database credentials are pre-configured in `docker-compose.yml` for local development. For production, use secure passwords and environment-specific configuration.
 
@@ -275,6 +290,22 @@ celery -A app.core.celery_app worker --loglevel=info
 | `GET` | `/api/opportunities/export/csv` | Export as CSV |
 | `GET` | `/api/opportunities/export/json` | Export as JSON |
 | `POST` | `/api/opportunities/regenerate-suggestions` | Regenerate AI suggestions |
+
+### Pages & Candidate Prompts
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/pages` | List crawled pages |
+| `GET` | `/api/pages/{id}` | Get page details |
+| `GET` | `/api/pages/{id}/candidate-prompts` | Generate AI candidate prompts |
+| `GET` | `/api/pages/orphan-pages` | Find pages with no prompt matches |
+
+### Core Web Vitals
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/cwv/page/{id}` | Get CWV for a page |
+| `GET` | `/api/cwv/prompt/{id}` | Get CWV for prompt's matched pages |
+| `GET` | `/api/cwv/url` | Get CWV for any URL |
+| `GET` | `/api/cwv/status` | Check CWV service status |
 
 Full interactive docs: **http://localhost:8000/api/docs**
 

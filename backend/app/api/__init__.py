@@ -9,6 +9,7 @@ from app.api.pages import router as pages_router
 from app.api.opportunities import router as opportunities_router
 from app.api.competitive import router as competitive_router
 from app.api.jobs import router as jobs_router
+from app.api.cwv import router as cwv_router
 
 router = APIRouter()
 
@@ -20,4 +21,5 @@ router.include_router(pages_router, prefix="/pages", tags=["Pages"])
 router.include_router(opportunities_router, prefix="/opportunities", tags=["Opportunities"])
 router.include_router(competitive_router, prefix="/competitive", tags=["Competitive Analysis"])
 router.include_router(jobs_router, prefix="/jobs", tags=["Jobs"])
+router.include_router(cwv_router, prefix="/cwv", tags=["Core Web Vitals"])
 

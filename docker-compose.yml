@@ -51,6 +51,8 @@ services:
       - AZURE_COMPLETION_DEPLOYMENT=${AZURE_COMPLETION_DEPLOYMENT:-gpt-4.1}
       - USE_LLM_FOR_INTENT=${USE_LLM_FOR_INTENT:-true}
       - USE_LLM_FOR_SUGGESTIONS=${USE_LLM_FOR_SUGGESTIONS:-true}
+      # Google PageSpeed API for Core Web Vitals
+      - GOOGLE_PAGESPEED_API_KEY=${GOOGLE_PAGESPEED_API_KEY:-}
     ports:
       - "8000:8000"
     volumes:

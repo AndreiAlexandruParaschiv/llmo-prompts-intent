@@ -71,6 +71,25 @@ class Page(Base, UUIDMixin, TimestampMixin):
     # Crawl timestamp
     crawled_at = Column(DateTime, nullable=True)
     
+    # Core Web Vitals (cached from PageSpeed Insights)
+    cwv_data = Column(JSONB, nullable=True)  # Stores CWV metrics
+    # Example: {
+    #   "lcp": 2500, "lcp_score": "good",
+    #   "cls": 0.1, "cls_score": "good",
+    #   "inp": 200, "inp_score": "good",
+    #   "performance_score": 85,
+    #   "fetched_at": "2024-01-15T10:30:00Z"
+    # }
+    
+    # Candidate prompts (AI-generated queries that would lead LLMs to cite this page)
+    candidate_prompts = Column(JSONB, nullable=True)
+    # Example: {
+    #   "prompts": [
+    #     {"text": "...", "transaction_score": 0.85, "intent": "commercial", ...}
+    #   ],
+    #   "generated_at": "2024-01-15T10:30:00Z"
+    # }
+    
     # Relationships
     project = relationship("Project", back_populates="pages")
     crawl_job = relationship("CrawlJob", back_populates="pages")

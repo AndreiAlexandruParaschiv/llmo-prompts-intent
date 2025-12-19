@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     USE_LLM_FOR_INTENT: bool = True  # Use LLM for edge case intent classification
     USE_LLM_FOR_SUGGESTIONS: bool = True  # Use LLM for content suggestions
     
+    # Google PageSpeed Insights API (for Core Web Vitals)
+    GOOGLE_PAGESPEED_API_KEY: Optional[str] = None
+    
     # Crawler settings
     CRAWLER_MAX_PAGES: int = 100
     CRAWLER_RATE_LIMIT: float = 1.0  # seconds between requests

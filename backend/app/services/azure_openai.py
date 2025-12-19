@@ -386,6 +386,117 @@ Generate suggested prompts as natural questions:"""
             return None
 
 
+    def generate_candidate_prompts(
+        self,
+        page_url: str,
+        page_title: str,
+        page_content: str,
+        meta_description: Optional[str] = None,
+        num_prompts: int = 5
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Generate high-impact candidate prompts that would make LLMs cite this page.
+        
+        Focus on prompts with transactional/commercial intent that would:
+        - Lead to the LLM citing or mentioning this specific page
+        - Have high conversion potential
+        - Match the page's unique value proposition
+        
+        Returns dict with:
+        - prompts: List of candidate prompts with transaction scores and reasoning
+        - generated_at: Timestamp of generation
+        """
+        if not self.enabled or not self.client:
+            return None
+        
+        content_excerpt = page_content[:2500] if page_content else ""
+        meta_info = f"\nMeta Description: {meta_description}" if meta_description else ""
+        
+        try:
+            response = self.client.chat.completions.create(
+                model=settings.AZURE_COMPLETION_DEPLOYMENT,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""You are an expert at understanding how LLMs (like ChatGPT, Claude, Perplexity) cite sources when answering user questions.
+
+Your task: Generate {num_prompts} HIGH-IMPACT search prompts/questions that would make an LLM cite this specific webpage when answering.
+
+CRITERIA FOR GOOD CANDIDATE PROMPTS:
+1. TRANSACTIONAL/COMMERCIAL INTENT: Focus on prompts that indicate the user wants to:
+   - Buy, book, subscribe, or take action
+   - Compare options before purchasing
+   - Find the best deal or solution
+   - Solve a specific problem that requires a product/service
+
+2. SPECIFICITY: The prompt must be specific enough that:
+   - An LLM would need to cite authoritative sources
+   - This page would be a strong match for the answer
+   - Generic answers wouldn't satisfy the user
+
+3. NATURAL LANGUAGE: Write prompts as real humans would ask:
+   - Use conversational language
+   - Start with "How", "What", "Where", "Which", "Can I", "Should I"
+   - Include specific details (locations, dates, features, prices)
+
+4. CITATION LIKELIHOOD: The prompt should require the LLM to:
+   - Reference specific products, services, or offers
+   - Provide authoritative information that needs sourcing
+   - Give recommendations that would benefit from expert sources
+
+EXAMPLES OF HIGH-IMPACT PROMPTS:
+- "What's the best way to book a business class flight to Tokyo with miles?"
+- "How much does it cost to upgrade to Premium Economy on a transatlantic flight?"
+- "Which cruise line has the best deals for Mediterranean trips in 2025?"
+- "Can I get a refund if my flight is cancelled due to weather?"
+
+Respond with JSON only:
+{{
+  "prompts": [
+    {{
+      "text": "The natural question prompt",
+      "transaction_score": 0.0-1.0,
+      "intent": "transactional|commercial|comparison|informational",
+      "reasoning": "Why this prompt would lead to citing this page",
+      "target_audience": "Who would ask this question",
+      "citation_trigger": "What specific content on the page would be cited"
+    }}
+  ]
+}}"""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Analyze this webpage and generate {num_prompts} high-impact candidate prompts that would make LLMs cite it:
+
+URL: {page_url}
+Title: {page_title}
+{meta_info}
+
+Content excerpt:
+{content_excerpt}
+
+Generate candidate prompts with HIGH transactional intent:"""
+                    }
+                ],
+                temperature=0.5,
+                max_tokens=1200,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            # Add generation timestamp
+            from datetime import datetime
+            result["generated_at"] = datetime.utcnow().isoformat()
+            
+            logger.debug(f"LLM candidate prompts for page: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Azure OpenAI candidate prompts generation failed: {e}")
+            return None
+
+
 # Singleton instance
 azure_openai_service = AzureOpenAIService()
 
