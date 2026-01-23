@@ -88,6 +88,7 @@ async def list_pages(
                 structured_data=p.structured_data or [],
                 mcp_checks=p.mcp_checks or {},
                 hreflang_tags=p.hreflang_tags or [],
+                seo_data=p.seo_data,
                 crawled_at=p.crawled_at,
                 created_at=p.created_at,
                 updated_at=p.updated_at,

@@ -46,6 +46,7 @@ class PageResponse(BaseModel):
     structured_data: List[Dict[str, Any]]
     mcp_checks: Dict[str, Any]
     hreflang_tags: List[Dict[str, str]]
+    seo_data: Optional[Dict[str, Any]] = None  # SEO keyword data from CSV import
     crawled_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime

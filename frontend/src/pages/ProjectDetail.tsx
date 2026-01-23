@@ -12,6 +12,7 @@ import {
   Lightbulb,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   Clock,
   CheckCircle2,
   AlertCircle,
@@ -33,6 +34,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { projectsApi, csvApi, pagesApi, jobsApi, Project, ProjectStats, CSVImport } from '@/services/api'
 import { useProjectStore } from '@/stores/projectStore'
 import { useToast } from '@/components/ui/use-toast'
@@ -137,15 +144,21 @@ function OverviewTab({ project, stats }: { project: Project; stats?: ProjectStat
   
   // File input ref for example prompts import
   const examplePromptsInputRef = useRef<HTMLInputElement>(null)
+  
+  // State for CSV crawl limit (top N pages by traffic)
+  const [csvCrawlLimit, setCsvCrawlLimit] = useState<number | undefined>(200)
 
   // Crawl from CSV mutation (with SEO keyword data)
   const csvCrawlMutation = useMutation({
-    mutationFn: (file: File) => projectsApi.crawlFromCsv(project.id, file),
+    mutationFn: (file: File) => projectsApi.crawlFromCsv(project.id, file, csvCrawlLimit),
     onSuccess: (response) => {
       const data = response.data
+      const limitMsg = data.limit_applied 
+        ? ` (top ${data.limit_applied} of ${data.total_urls_in_csv} by traffic)` 
+        : ''
       toast({ 
         title: 'CSV Crawl Started', 
-        description: `Crawling ${data.urls_to_crawl} URLs. ${data.urls_with_seo_data} have SEO keyword data.` 
+        description: `Crawling ${data.urls_to_crawl} URLs${limitMsg}. ${data.urls_with_seo_data} have SEO keyword data.` 
       })
       queryClient.invalidateQueries({ queryKey: ['crawl-jobs', project.id] })
       queryClient.invalidateQueries({ queryKey: ['project-stats', project.id] })
@@ -487,19 +500,40 @@ function OverviewTab({ project, stats }: { project: Project; stats?: ProjectStat
                   accept=".csv"
                   className="hidden"
                 />
-                <Button 
-                  variant="outline"
-                  onClick={() => csvCrawlInputRef.current?.click()}
-                  disabled={csvCrawlMutation.isPending || activeCrawl}
-                  title="Upload Ahrefs/SEMrush CSV with URLs and keyword data"
-                >
-                  {csvCrawlMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4 mr-2" />
-                  )}
-                  Crawl from CSV
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button 
+                      variant="outline"
+                      disabled={csvCrawlMutation.isPending || activeCrawl}
+                      title="Upload Ahrefs/SEMrush CSV with URLs and keyword data"
+                    >
+                      {csvCrawlMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="w-4 h-4 mr-2" />
+                      )}
+                      Crawl from CSV
+                      <ChevronDown className="w-4 h-4 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => { setCsvCrawlLimit(100); setTimeout(() => csvCrawlInputRef.current?.click(), 0); }}>
+                      Top 100 pages by traffic
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setCsvCrawlLimit(200); setTimeout(() => csvCrawlInputRef.current?.click(), 0); }}>
+                      Top 200 pages by traffic
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setCsvCrawlLimit(300); setTimeout(() => csvCrawlInputRef.current?.click(), 0); }}>
+                      Top 300 pages by traffic
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setCsvCrawlLimit(500); setTimeout(() => csvCrawlInputRef.current?.click(), 0); }}>
+                      Top 500 pages by traffic
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setCsvCrawlLimit(undefined); setTimeout(() => csvCrawlInputRef.current?.click(), 0); }}>
+                      All pages (no limit)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button 
                   variant={crawlComplete ? "outline" : "default"}
                   onClick={() => crawlMutation.mutate()}

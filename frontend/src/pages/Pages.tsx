@@ -110,6 +110,43 @@ function PageCard({ page }: { page: Page }) {
               )}
             </div>
 
+            {/* SEO Keywords from CSV */}
+            {page.seo_data?.keywords && page.seo_data.keywords.length > 0 && (
+              <div className="mt-3 p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <Search className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
+                  <span className="text-xs font-medium text-violet-700 dark:text-violet-300">
+                    SEO Keywords ({page.seo_data.keywords.length})
+                  </span>
+                  {page.seo_data.total_volume && (
+                    <span className="text-xs text-violet-500">
+                      • {page.seo_data.total_volume.toLocaleString()} total volume
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {page.seo_data.keywords.slice(0, 5).map((kw, idx) => (
+                    <span 
+                      key={idx}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-slate-800 rounded text-xs text-slate-700 dark:text-slate-300 border border-violet-200 dark:border-violet-700"
+                    >
+                      {kw.keyword}
+                      {kw.volume && (
+                        <span className="text-violet-500 text-[10px]">
+                          {kw.volume.toLocaleString()}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                  {page.seo_data.keywords.length > 5 && (
+                    <span className="text-xs text-violet-500 px-2 py-0.5">
+                      +{page.seo_data.keywords.length - 5} more
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* MCP Checks */}
             {page.mcp_checks && Object.keys(page.mcp_checks).length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
@@ -197,14 +234,20 @@ export default function Pages() {
     },
   })
 
+  // State for CSV crawl limit (top N pages by traffic)
+  const [csvCrawlLimit, setCsvCrawlLimit] = useState<number | undefined>(200)
+
   // Crawl from CSV mutation (with SEO keyword data)
   const csvCrawlMutation = useMutation({
-    mutationFn: (file: File) => projectsApi.crawlFromCsv(selectedProjectId!, file),
+    mutationFn: (file: File) => projectsApi.crawlFromCsv(selectedProjectId!, file, csvCrawlLimit),
     onSuccess: (response) => {
       const data = response.data
+      const limitMsg = data.limit_applied 
+        ? ` (top ${data.limit_applied} of ${data.total_urls_in_csv} by traffic)` 
+        : ''
       toast({ 
         title: 'CSV Crawl Started', 
-        description: `Crawling ${data.urls_to_crawl} URLs. ${data.urls_with_seo_data} have SEO keyword data.` 
+        description: `Crawling ${data.urls_to_crawl} URLs${limitMsg}. ${data.urls_with_seo_data} have SEO keyword data.` 
       })
       queryClient.invalidateQueries({ queryKey: ['crawl-jobs'] })
       queryClient.invalidateQueries({ queryKey: ['pages'] })
@@ -269,9 +312,17 @@ export default function Pages() {
                   <Play className="w-4 h-4 mr-2" />
                   Start Crawl (from domains)
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => csvFileInputRef.current?.click()}>
+                <DropdownMenuItem onClick={() => { setCsvCrawlLimit(200); setTimeout(() => csvFileInputRef.current?.click(), 0); }}>
                   <Upload className="w-4 h-4 mr-2" />
-                  Crawl from CSV (with keywords)
+                  CSV: Top 200 by traffic
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setCsvCrawlLimit(300); setTimeout(() => csvFileInputRef.current?.click(), 0); }}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  CSV: Top 300 by traffic
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setCsvCrawlLimit(undefined); setTimeout(() => csvFileInputRef.current?.click(), 0); }}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  CSV: All pages
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

@@ -78,6 +78,17 @@ export interface Page {
   structured_data: unknown[]
   mcp_checks: Record<string, unknown>
   hreflang_tags: Array<{ lang: string; url: string }>
+  seo_data: {
+    keywords?: Array<{
+      keyword: string
+      volume?: number
+      kd?: number
+      traffic?: number
+      position?: number
+    }>
+    top_keyword?: string
+    total_volume?: number
+  } | null
   crawled_at: string | null
   created_at: string
 }
@@ -134,16 +145,19 @@ export const projectsApi = {
   getStats: (id: string) => api.get<ProjectStats>(`/projects/${id}/stats`),
   startCrawl: (id: string, startUrls?: string[]) =>
     api.post(`/projects/${id}/crawl`, { start_urls: startUrls }),
-  crawlFromCsv: (id: string, file: File) => {
+  crawlFromCsv: (id: string, file: File, limit?: number) => {
     const formData = new FormData()
     formData.append('file', file)
+    const params = limit ? `?limit=${limit}` : ''
     return api.post<{
       crawl_job_id: string
       task_id: string
       status: string
       urls_to_crawl: number
       urls_with_seo_data: number
-    }>(`/projects/${id}/crawl-from-csv`, formData, {
+      total_urls_in_csv: number
+      limit_applied: number | null
+    }>(`/projects/${id}/crawl-from-csv${params}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },

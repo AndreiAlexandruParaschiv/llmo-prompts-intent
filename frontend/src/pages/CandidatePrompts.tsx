@@ -683,25 +683,11 @@ export default function CandidatePrompts() {
             <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
               {stats?.total_prompts === 0 ? 'No Prompts Generated Yet' : 'No Matching Prompts'}
             </h3>
-            <p className="text-slate-500 text-center max-w-sm mb-4">
+            <p className="text-slate-500 text-center max-w-sm">
               {stats?.total_prompts === 0
-                ? 'Click "Generate" to create candidate prompts for your pages.'
+                ? 'Click "Generate" above to create candidate prompts for your pages.'
                 : 'Try adjusting your filters to see more prompts.'}
             </p>
-            {stats?.total_prompts === 0 && (
-              <Button
-                onClick={() => generateMutation.mutate(false)}
-                disabled={generateMutation.isPending}
-                className="bg-gradient-to-r from-violet-500 to-purple-500"
-              >
-                {generateMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4 mr-2" />
-                )}
-                Generate Prompts
-              </Button>
-            )}
           </CardContent>
         </Card>
       ) : (

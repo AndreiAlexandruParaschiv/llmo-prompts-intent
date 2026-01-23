@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     
     # Crawler settings
     CRAWLER_MAX_PAGES: int = 100
-    CRAWLER_RATE_LIMIT: float = 1.0  # seconds between requests
-    CRAWLER_TIMEOUT: int = 30000  # milliseconds
+    CRAWLER_RATE_LIMIT: float = 2.0  # seconds between requests (increased to avoid rate limiting)
+    CRAWLER_TIMEOUT: int = 45000  # milliseconds (increased from 30s to 45s for slower sites)
     CRAWLER_RESPECT_ROBOTS: bool = True
     
     # JWT Settings

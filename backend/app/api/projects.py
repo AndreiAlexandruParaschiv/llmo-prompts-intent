@@ -259,6 +259,7 @@ async def start_crawl(
 async def crawl_from_csv(
     project_id: UUID,
     file: UploadFile = File(..., description="CSV file with URLs and SEO data (Ahrefs/SEMrush format)"),
+    limit: Optional[int] = Query(None, ge=1, le=1000, description="Limit to top N pages by traffic"),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -272,8 +273,9 @@ async def crawl_from_csv(
     
     This will:
     1. Extract URLs from the CSV
-    2. Crawl each URL
-    3. Store SEO keyword data alongside each page
+    2. Sort by traffic and optionally limit to top N pages
+    3. Crawl each URL
+    4. Store SEO keyword data alongside each page
     """
     project = await db.get(Project, project_id)
     if not project:
@@ -379,6 +381,31 @@ async def crawl_from_csv(
     if not urls_to_crawl:
         raise HTTPException(status_code=400, detail="No valid URLs found in CSV")
     
+    total_urls_in_csv = len(urls_to_crawl)
+    
+    # If limit specified, sort by traffic and take top N
+    if limit and limit < len(urls_to_crawl):
+        # Create list of (url, traffic) tuples for sorting
+        url_traffic_pairs = []
+        for url in urls_to_crawl:
+            traffic = 0
+            if url in seo_data_by_url:
+                traffic = seo_data_by_url[url].get('traffic', 0) or 0
+            url_traffic_pairs.append((url, traffic))
+        
+        # Sort by traffic descending
+        url_traffic_pairs.sort(key=lambda x: x[1], reverse=True)
+        
+        # Take top N
+        urls_to_crawl = [url for url, _ in url_traffic_pairs[:limit]]
+        
+        # Filter seo_data_by_url to only include selected URLs
+        selected_urls_set = set(urls_to_crawl)
+        seo_data_by_url = {
+            url: data for url, data in seo_data_by_url.items() 
+            if url in selected_urls_set or url.rstrip('/') in selected_urls_set
+        }
+    
     # Create crawl job with SEO data in config
     crawl_job = CrawlJob(
         id=uuid4(),
@@ -413,6 +440,8 @@ async def crawl_from_csv(
         "status": "started",
         "urls_to_crawl": len(urls_to_crawl),
         "urls_with_seo_data": len(seo_data_by_url) // 2,  # Divide by 2 because we store with/without trailing slash
+        "total_urls_in_csv": total_urls_in_csv,
+        "limit_applied": limit if limit and limit < total_urls_in_csv else None,
     }
 
 

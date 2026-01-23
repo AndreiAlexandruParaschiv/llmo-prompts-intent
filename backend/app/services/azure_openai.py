@@ -482,11 +482,11 @@ These are for CITATION TRACKING - queries where the brand wants to BE MENTIONED/
 - These test whether the LLM will cite this brand when answering general questions
 
 GENERIC EXAMPLES:
-- "what's the best luxury suv for a family of 6"
-- "which electric car has the longest range under 60k"
-- "best full-size suv for towing a boat"
-- "what car brands let you order online and deliver to your home"
-- "most reliable luxury sedan 2025"
+- "what's the best luxury suv for a family of 6?"
+- "which electric car has the longest range under 60k?"
+- "what's the best full-size suv for towing a boat?"
+- "what car brands let you order online and deliver to your home?"
+- "what's the most reliable luxury sedan for 2025?"
 
 ## CATEGORY 2: BRANDED PROMPTS (3-4 prompts)
 These are for VERIFICATION and SENTIMENT TRACKING - queries about the specific brand.
@@ -496,15 +496,16 @@ These are for VERIFICATION and SENTIMENT TRACKING - queries about the specific b
 - Include comparison prompts with competitors
 
 BRANDED EXAMPLES:
-- "is the cadillac escalade worth the price"
-- "how does the lyriq compare to tesla model y"
-- "what's the towing capacity of the 2025 escalade"
-- "are cadillac suvs reliable"
+- "is the cadillac escalade worth the price?"
+- "how does the lyriq compare to tesla model y?"
+- "what's the towing capacity of the 2025 escalade?"
+- "are cadillac suvs reliable?"
 
 PROMPT CHARACTERISTICS:
 1. CASUAL TONE: Use lowercase, contractions, informal phrasing (how real people type)
 2. REAL INTENT: Focus on what people ACTUALLY want to know
 3. ACTIONABLE: Prompts that marketers can track and act on
+4. QUESTION FORMAT: ALL prompts MUST end with a question mark (?) - these are questions people ask LLMs
 
 PROMPT CATEGORIES (prompt_category field):
 - "generic" - No brand name, category-level query (for citation tracking)
