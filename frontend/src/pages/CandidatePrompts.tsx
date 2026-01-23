@@ -20,6 +20,7 @@ import {
   ChevronUp,
   FileText,
   Globe,
+  StopCircle,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -292,6 +293,26 @@ export default function CandidatePrompts() {
     },
   })
 
+  // Cancel generation mutation
+  const cancelMutation = useMutation({
+    mutationFn: () => pagesApi.cancelCandidatePromptsGeneration(projectId!),
+    onSuccess: (response) => {
+      const data = response.data
+      if (data.status === 'cancelled') {
+        toast({
+          title: 'Generation Stopped',
+          description: 'Prompt generation has been cancelled.',
+        })
+      } else {
+        toast({ title: 'No Active Task', description: data.message })
+      }
+      refetchStats()
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to cancel', description: error.message, variant: 'destructive' })
+    },
+  })
+
   // Export handler
   const handleExport = async () => {
     if (!projectId) return
@@ -420,9 +441,25 @@ export default function CandidatePrompts() {
                       Generation in Progress
                     </span>
                   </div>
-                  <span className="text-sm text-violet-600 dark:text-violet-400">
-                    {stats.pages_with_prompts} / {stats.total_pages} pages
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-violet-600 dark:text-violet-400">
+                      {stats.pages_with_prompts} / {stats.total_pages} pages
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => cancelMutation.mutate()}
+                      disabled={cancelMutation.isPending}
+                      className="text-red-600 border-red-300 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
+                    >
+                      {cancelMutation.isPending ? (
+                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      ) : (
+                        <StopCircle className="w-3 h-3 mr-1" />
+                      )}
+                      Stop
+                    </Button>
+                  </div>
                 </div>
                 <Progress value={stats.generation_progress} className="h-2" />
               </CardContent>

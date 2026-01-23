@@ -746,11 +746,55 @@ async def generate_candidate_prompts_batch(
     # Start background task
     task = generate_candidate_prompts_batch.delay(page_ids, num_prompts)
     
+    # Store task_id in Redis for cancellation
+    from app.core.celery_app import celery_app
+    celery_app.backend.client.set(
+        f"candidate_prompts_task:{project_id}", 
+        task.id,
+        ex=3600  # Expire after 1 hour
+    )
+    
     return {
         "status": "processing",
         "task_id": task.id,
         "pages_queued": len(page_ids),
         "message": f"Generating candidate prompts for {len(page_ids)} pages",
+    }
+
+
+@router.post("/cancel-candidate-prompts-generation", response_model=dict)
+async def cancel_candidate_prompts_generation(
+    project_id: UUID = Query(..., description="Project ID to cancel generation for"),
+):
+    """
+    Cancel an ongoing candidate prompts generation task.
+    """
+    from app.core.celery_app import celery_app
+    from celery.result import AsyncResult
+    
+    # Get task_id from Redis
+    task_id = celery_app.backend.client.get(f"candidate_prompts_task:{project_id}")
+    
+    if not task_id:
+        return {
+            "status": "no_task",
+            "message": "No active generation task found for this project",
+        }
+    
+    task_id = task_id.decode('utf-8') if isinstance(task_id, bytes) else task_id
+    
+    # Revoke the task
+    celery_app.control.revoke(task_id, terminate=True, signal='SIGTERM')
+    
+    # Clear the stored task_id
+    celery_app.backend.client.delete(f"candidate_prompts_task:{project_id}")
+    
+    logger.info("Cancelled candidate prompts generation", project_id=str(project_id), task_id=task_id)
+    
+    return {
+        "status": "cancelled",
+        "task_id": task_id,
+        "message": "Generation task has been cancelled",
     }
 
 

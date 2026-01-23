@@ -351,6 +351,12 @@ export const pagesApi = {
       by_funnel_stage: Record<string, number>
       generation_progress: number
     }>('/pages/candidate-prompts/stats', { params: { project_id: projectId } }),
+  cancelCandidatePromptsGeneration: (projectId: string) =>
+    api.post<{ status: string; task_id?: string; message: string }>(
+      '/pages/cancel-candidate-prompts-generation',
+      null,
+      { params: { project_id: projectId } }
+    ),
 }
 
 // Opportunities
