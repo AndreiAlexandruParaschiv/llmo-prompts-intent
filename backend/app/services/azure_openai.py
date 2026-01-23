@@ -562,6 +562,26 @@ Make them sound like how real people ACTUALLY talk to AI assistants:"""
             
             result = json.loads(response.choices[0].message.content)
             
+            # Post-process: Ensure ALL prompts end with a question mark and deduplicate
+            if "prompts" in result:
+                seen_prompts = set()
+                unique_prompts = []
+                
+                for prompt in result["prompts"]:
+                    if "text" in prompt and prompt["text"]:
+                        text = prompt["text"].strip()
+                        if not text.endswith("?"):
+                            text = text + "?"
+                        prompt["text"] = text
+                        
+                        # Deduplicate by normalized text (lowercase, stripped)
+                        normalized = text.lower().strip()
+                        if normalized not in seen_prompts:
+                            seen_prompts.add(normalized)
+                            unique_prompts.append(prompt)
+                
+                result["prompts"] = unique_prompts
+            
             # Add generation timestamp and page info
             from datetime import datetime
             result["generated_at"] = datetime.utcnow().isoformat()

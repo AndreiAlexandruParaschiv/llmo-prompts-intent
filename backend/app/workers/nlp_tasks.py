@@ -143,6 +143,51 @@ def generate_page_embeddings_batch(page_ids: List[str]):
         db.close()
 
 
+def _collect_existing_prompts(db: Session, project_id: UUID, exclude_page_ids: List[UUID] | None = None) -> set:
+    """
+    Collect all existing prompt texts from a project for deduplication.
+    Returns a set of normalized (lowercase) prompt texts.
+    """
+    from app.models.page import Page
+    
+    query = db.query(Page).filter(
+        Page.project_id == project_id,
+        Page.candidate_prompts.isnot(None)
+    )
+    
+    if exclude_page_ids:
+        query = query.filter(Page.id.notin_(exclude_page_ids))
+    
+    existing_prompts = set()
+    for page in query.all():
+        prompts_data = page.candidate_prompts
+        if prompts_data and "prompts" in prompts_data:
+            for prompt in prompts_data["prompts"]:
+                if "text" in prompt and prompt["text"]:
+                    existing_prompts.add(prompt["text"].lower().strip())
+    
+    return existing_prompts
+
+
+def _deduplicate_prompts(result: dict, existing_prompts: set) -> dict:
+    """
+    Remove prompts that already exist in the project.
+    """
+    if not result or "prompts" not in result:
+        return result
+    
+    unique_prompts = []
+    for prompt in result["prompts"]:
+        if "text" in prompt and prompt["text"]:
+            normalized = prompt["text"].lower().strip()
+            if normalized not in existing_prompts:
+                unique_prompts.append(prompt)
+                existing_prompts.add(normalized)  # Add to set to prevent duplicates within batch
+    
+    result["prompts"] = unique_prompts
+    return result
+
+
 @celery_app.task(name="generate_candidate_prompts_batch", bind=True)
 def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int = 5, example_prompts: list | None = None):
     """
@@ -171,8 +216,18 @@ def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int
             Page.id.in_([UUID(pid) for pid in page_ids])
         ).all()
         
+        if not pages:
+            return {"status": "completed", "processed": 0, "failed": 0, "total": 0}
+        
+        # Get project ID from first page and collect existing prompts for deduplication
+        project_id = pages[0].project_id
+        page_uuid_list = [UUID(pid) for pid in page_ids]
+        existing_prompts = _collect_existing_prompts(db, project_id, exclude_page_ids=page_uuid_list)
+        logger.info("Collected existing prompts for deduplication", count=len(existing_prompts))
+        
         processed = 0
         failed = 0
+        duplicates_removed = 0
         
         for i, page in enumerate(pages):
             try:
@@ -188,9 +243,19 @@ def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int
                 )
                 
                 if result:
+                    # Count prompts before deduplication
+                    original_count = len(result.get("prompts", []))
+                    
+                    # Deduplicate against existing prompts in project
+                    result = _deduplicate_prompts(result, existing_prompts)
+                    
+                    # Track duplicates removed
+                    new_count = len(result.get("prompts", []))
+                    duplicates_removed += (original_count - new_count)
+                    
                     page.candidate_prompts = result
                     processed += 1
-                    logger.debug("Generated prompts for page", url=page.url, prompts=len(result.get("prompts", [])))
+                    logger.debug("Generated prompts for page", url=page.url, prompts=new_count, duplicates_removed=original_count - new_count)
                 else:
                     failed += 1
                     logger.warning("Failed to generate prompts for page", url=page.url)
@@ -207,6 +272,7 @@ def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int
                             "failed": failed,
                             "total": len(pages),
                             "current_url": page.url,
+                            "duplicates_removed": duplicates_removed,
                         }
                     )
                 
@@ -225,6 +291,7 @@ def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int
             processed=processed,
             failed=failed,
             total=len(pages),
+            duplicates_removed=duplicates_removed,
         )
         
         return {
@@ -232,6 +299,7 @@ def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int
             "processed": processed,
             "failed": failed,
             "total": len(pages),
+            "duplicates_removed": duplicates_removed,
         }
         
     except Exception as e:

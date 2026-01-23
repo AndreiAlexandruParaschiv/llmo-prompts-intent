@@ -79,15 +79,14 @@ export interface Page {
   mcp_checks: Record<string, unknown>
   hreflang_tags: Array<{ lang: string; url: string }>
   seo_data: {
-    keywords?: Array<{
-      keyword: string
-      volume?: number
-      kd?: number
-      traffic?: number
-      position?: number
-    }>
     top_keyword?: string
-    total_volume?: number
+    keyword_volume?: number
+    traffic?: number
+    traffic_value?: number
+    keywords_count?: number
+    referring_domains?: number
+    url_rating?: number
+    imported_at?: string
   } | null
   crawled_at: string | null
   created_at: string

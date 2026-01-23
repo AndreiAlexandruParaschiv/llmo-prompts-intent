@@ -110,37 +110,43 @@ function PageCard({ page }: { page: Page }) {
               )}
             </div>
 
-            {/* SEO Keywords from CSV */}
-            {page.seo_data?.keywords && page.seo_data.keywords.length > 0 && (
+            {/* SEO Data from CSV */}
+            {page.seo_data && (page.seo_data.top_keyword || page.seo_data.traffic) && (
               <div className="mt-3 p-2 bg-violet-50 dark:bg-violet-900/20 rounded-lg">
                 <div className="flex items-center gap-2 mb-2">
                   <Search className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
                   <span className="text-xs font-medium text-violet-700 dark:text-violet-300">
-                    SEO Keywords ({page.seo_data.keywords.length})
+                    SEO Data
                   </span>
-                  {page.seo_data.total_volume && (
-                    <span className="text-xs text-violet-500">
-                      • {page.seo_data.total_volume.toLocaleString()} total volume
-                    </span>
-                  )}
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {page.seo_data.keywords.slice(0, 5).map((kw, idx) => (
-                    <span 
-                      key={idx}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-slate-800 rounded text-xs text-slate-700 dark:text-slate-300 border border-violet-200 dark:border-violet-700"
-                    >
-                      {kw.keyword}
-                      {kw.volume && (
+                <div className="flex flex-wrap gap-2">
+                  {/* Top Keyword */}
+                  {page.seo_data.top_keyword && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white dark:bg-slate-800 rounded text-xs text-slate-700 dark:text-slate-300 border border-violet-200 dark:border-violet-700">
+                      <span className="font-medium">{page.seo_data.top_keyword}</span>
+                      {page.seo_data.keyword_volume && (
                         <span className="text-violet-500 text-[10px]">
-                          {kw.volume.toLocaleString()}
+                          {page.seo_data.keyword_volume.toLocaleString()} vol
                         </span>
                       )}
                     </span>
-                  ))}
-                  {page.seo_data.keywords.length > 5 && (
-                    <span className="text-xs text-violet-500 px-2 py-0.5">
-                      +{page.seo_data.keywords.length - 5} more
+                  )}
+                  {/* Traffic */}
+                  {page.seo_data.traffic && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 rounded text-xs text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700">
+                      {page.seo_data.traffic.toLocaleString()} traffic
+                    </span>
+                  )}
+                  {/* Keywords Count */}
+                  {page.seo_data.keywords_count && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 rounded text-xs text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-700">
+                      {page.seo_data.keywords_count} keywords
+                    </span>
+                  )}
+                  {/* Referring Domains */}
+                  {page.seo_data.referring_domains && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-50 dark:bg-orange-900/20 rounded text-xs text-orange-700 dark:text-orange-300 border border-orange-200 dark:border-orange-700">
+                      {page.seo_data.referring_domains} refs
                     </span>
                   )}
                 </div>
