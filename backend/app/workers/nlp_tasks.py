@@ -142,3 +142,97 @@ def generate_page_embeddings_batch(page_ids: List[str]):
     finally:
         db.close()
 
+
+@celery_app.task(name="generate_candidate_prompts_batch", bind=True)
+def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int = 5):
+    """
+    Generate candidate prompts for a batch of pages using Azure OpenAI.
+    
+    This generates casual, human-like prompts that would make LLMs cite each page.
+    Results are cached in the page's candidate_prompts JSONB field.
+    """
+    from app.models.page import Page
+    from app.services.azure_openai import azure_openai_service
+    import time
+    
+    logger.info("Generating candidate prompts batch", count=len(page_ids), num_prompts=num_prompts)
+    
+    if not azure_openai_service.enabled:
+        logger.error("Azure OpenAI service not enabled")
+        return {"status": "error", "message": "Azure OpenAI service not configured"}
+    
+    db = SessionLocal()
+    
+    try:
+        pages = db.query(Page).filter(
+            Page.id.in_([UUID(pid) for pid in page_ids])
+        ).all()
+        
+        processed = 0
+        failed = 0
+        
+        for i, page in enumerate(pages):
+            try:
+                # Generate candidate prompts
+                result = azure_openai_service.generate_candidate_prompts(
+                    page_url=page.url,
+                    page_title=page.title or "",
+                    page_content=page.content or "",
+                    meta_description=page.meta_description,
+                    num_prompts=num_prompts,
+                )
+                
+                if result:
+                    page.candidate_prompts = result
+                    processed += 1
+                    logger.debug("Generated prompts for page", url=page.url, prompts=len(result.get("prompts", [])))
+                else:
+                    failed += 1
+                    logger.warning("Failed to generate prompts for page", url=page.url)
+                
+                # Commit every 10 pages
+                if (i + 1) % 10 == 0:
+                    db.commit()
+                    
+                    # Update task state for progress tracking
+                    self.update_state(
+                        state="PROGRESS",
+                        meta={
+                            "processed": processed,
+                            "failed": failed,
+                            "total": len(pages),
+                            "current_url": page.url,
+                        }
+                    )
+                
+                # Rate limiting - avoid hitting API too fast
+                time.sleep(0.5)
+                
+            except Exception as e:
+                failed += 1
+                logger.error("Error generating prompts for page", url=page.url, error=str(e))
+        
+        # Final commit
+        db.commit()
+        
+        logger.info(
+            "Candidate prompts batch completed",
+            processed=processed,
+            failed=failed,
+            total=len(pages),
+        )
+        
+        return {
+            "status": "completed",
+            "processed": processed,
+            "failed": failed,
+            "total": len(pages),
+        }
+        
+    except Exception as e:
+        logger.error("Candidate prompts batch failed", error=str(e))
+        return {"status": "error", "message": str(e)}
+        
+    finally:
+        db.close()
+

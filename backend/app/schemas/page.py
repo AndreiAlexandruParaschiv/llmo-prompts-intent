@@ -69,8 +69,12 @@ class CandidatePrompt(BaseModel):
     text: str
     transaction_score: float
     intent: str
+    funnel_stage: Optional[str] = None  # awareness, consideration, decision
+    topic: Optional[str] = None
+    sub_topic: Optional[str] = None
+    audience_persona: Optional[str] = None
     reasoning: str
-    target_audience: str
+    target_audience: Optional[str] = None  # Legacy field, use audience_persona
     citation_trigger: Optional[str] = None
 
 
@@ -80,6 +84,8 @@ class CandidatePromptsResponse(BaseModel):
     page_id: UUID
     page_url: str
     page_title: Optional[str]
+    page_topic: Optional[str] = None
+    page_summary: Optional[str] = None
     prompts: List[CandidatePrompt]
     generated_at: Optional[str] = None
     cached: bool = False

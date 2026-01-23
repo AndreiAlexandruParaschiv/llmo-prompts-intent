@@ -404,6 +404,8 @@ Generate suggested prompts as natural questions:"""
         
         Returns dict with:
         - prompts: List of candidate prompts with transaction scores and reasoning
+        - page_topic: Overall topic of the page
+        - page_summary: Brief summary of what the page offers
         - generated_at: Timestamp of generation
         """
         if not self.enabled or not self.client:
@@ -418,55 +420,66 @@ Generate suggested prompts as natural questions:"""
                 messages=[
                     {
                         "role": "system",
-                        "content": f"""You are an expert at understanding how LLMs (like ChatGPT, Claude, Perplexity) cite sources when answering user questions.
+                        "content": f"""You are an expert at understanding how real humans ask questions to AI assistants like ChatGPT, Claude, Perplexity, and Google's AI Overview.
 
-Your task: Generate {num_prompts} HIGH-IMPACT search prompts/questions that would make an LLM cite this specific webpage when answering.
+Your task: Generate {num_prompts} HIGH-IMPACT prompts/questions that real users would type into an LLM that would make the LLM cite this specific webpage.
 
-CRITERIA FOR GOOD CANDIDATE PROMPTS:
-1. TRANSACTIONAL/COMMERCIAL INTENT: Focus on prompts that indicate the user wants to:
-   - Buy, book, subscribe, or take action
-   - Compare options before purchasing
-   - Find the best deal or solution
-   - Solve a specific problem that requires a product/service
+CRITICAL - WRITE LIKE REAL HUMANS TALK TO AI:
+Real users are CASUAL and CONVERSATIONAL. They don't type formal queries - they chat naturally.
 
-2. SPECIFICITY: The prompt must be specific enough that:
-   - An LLM would need to cite authoritative sources
-   - This page would be a strong match for the answer
-   - Generic answers wouldn't satisfy the user
+BAD examples (too formal/SEO-like):
+- "What are the performance specifications of the 2026 Cadillac CT5-V Blackwing?"
+- "Review the specifications and features of premium sedan vehicles"
+- "Information about Mediterranean cruise packages 2025"
 
-3. NATURAL LANGUAGE: Write prompts as real humans would ask:
-   - Use conversational language
-   - Start with "How", "What", "Where", "Which", "Can I", "Should I"
-   - Include specific details (locations, dates, features, prices)
+GOOD examples (how real humans actually ask):
+- "how much hp does the ct5-v blackwing have"
+- "is the blackwing worth it over the regular ct5-v"
+- "what's the fastest cadillac you can buy right now"
+- "thinking about a med cruise next summer, what should I expect to pay"
+- "can I get a manual transmission in the new blackwing"
 
-4. CITATION LIKELIHOOD: The prompt should require the LLM to:
-   - Reference specific products, services, or offers
-   - Provide authoritative information that needs sourcing
-   - Give recommendations that would benefit from expert sources
+PROMPT CHARACTERISTICS:
+1. CASUAL TONE: Use lowercase, contractions, informal phrasing
+2. REAL INTENT: Focus on what people ACTUALLY want to know:
+   - Price/cost questions ("how much does X cost", "is X worth the money")
+   - Comparisons ("X vs Y", "should I get X or Y", "is X better than Y")
+   - Specific features ("does X have...", "can X do...")
+   - Decision help ("should I buy X", "is X good for...")
+   - Problem solving ("I need X, what should I get")
+3. VARIETY: Mix of:
+   - Quick factual questions ("what's the 0-60 on...")
+   - Opinion/advice seeking ("is X worth it")
+   - Comparison shopping ("X vs competitors")
+   - Specific use cases ("best X for families/commuting/etc")
 
-EXAMPLES OF HIGH-IMPACT PROMPTS:
-- "What's the best way to book a business class flight to Tokyo with miles?"
-- "How much does it cost to upgrade to Premium Economy on a transatlantic flight?"
-- "Which cruise line has the best deals for Mediterranean trips in 2025?"
-- "Can I get a refund if my flight is cancelled due to weather?"
+FUNNEL STAGES to cover:
+- awareness: "what is X", "tell me about X"
+- consideration: "X vs Y", "is X good", "X reviews"
+- decision: "should I buy X", "best deal on X", "how to order X"
 
 Respond with JSON only:
 {{
+  "page_topic": "Main topic/category (e.g., 'Performance Sedans', 'Mediterranean Cruises')",
+  "page_summary": "One sentence summary of what this page offers",
   "prompts": [
     {{
-      "text": "The natural question prompt",
+      "text": "The casual, natural question (how a real person would type it)",
       "transaction_score": 0.0-1.0,
       "intent": "transactional|commercial|comparison|informational",
+      "funnel_stage": "awareness|consideration|decision",
+      "topic": "Specific topic this prompt relates to",
+      "sub_topic": "More specific sub-topic if applicable",
+      "audience_persona": "Type of person asking (e.g., 'Car enthusiast', 'First-time buyer', 'Budget-conscious shopper')",
       "reasoning": "Why this prompt would lead to citing this page",
-      "target_audience": "Who would ask this question",
-      "citation_trigger": "What specific content on the page would be cited"
+      "citation_trigger": "What specific content would be cited"
     }}
   ]
 }}"""
                     },
                     {
                         "role": "user",
-                        "content": f"""Analyze this webpage and generate {num_prompts} high-impact candidate prompts that would make LLMs cite it:
+                        "content": f"""Analyze this webpage and generate {num_prompts} CASUAL, NATURAL prompts that real humans would type into ChatGPT/Claude/Perplexity:
 
 URL: {page_url}
 Title: {page_title}
@@ -475,19 +488,21 @@ Title: {page_title}
 Content excerpt:
 {content_excerpt}
 
-Generate candidate prompts with HIGH transactional intent:"""
+Generate prompts that sound like how people ACTUALLY talk to AI assistants:"""
                     }
                 ],
-                temperature=0.5,
-                max_tokens=1200,
+                temperature=0.6,
+                max_tokens=1500,
                 response_format={"type": "json_object"}
             )
             
             result = json.loads(response.choices[0].message.content)
             
-            # Add generation timestamp
+            # Add generation timestamp and page info
             from datetime import datetime
             result["generated_at"] = datetime.utcnow().isoformat()
+            result["page_url"] = page_url
+            result["page_title"] = page_title
             
             logger.debug(f"LLM candidate prompts for page: {result}")
             return result

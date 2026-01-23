@@ -15,6 +15,9 @@ from app.models.crawl_job import CrawlJob, CrawlStatus
 from app.schemas.page import PageResponse, PageListResponse, CandidatePromptsResponse, CandidatePrompt
 from app.services.azure_openai import azure_openai_service
 from datetime import datetime
+from fastapi.responses import StreamingResponse
+import csv
+import io
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -397,6 +400,334 @@ async def generate_orphan_page_suggestions(
     }
 
 
+@router.get("/candidate-prompts/list")
+async def list_all_candidate_prompts(
+    project_id: UUID = Query(..., description="Project ID"),
+    intent: Optional[str] = Query(None, description="Filter by intent"),
+    funnel_stage: Optional[str] = Query(None, description="Filter by funnel stage"),
+    search: Optional[str] = Query(None, description="Search in prompt text"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    List all candidate prompts for a project with filtering and pagination.
+    Returns prompts from all pages that have candidate_prompts generated.
+    """
+    # Get all pages with candidate prompts for this project
+    query = select(Page).where(
+        Page.project_id == project_id,
+        Page.candidate_prompts.isnot(None)
+    )
+    
+    result = await db.execute(query)
+    pages = result.scalars().all()
+    
+    # Flatten all prompts with their page info
+    all_prompts = []
+    for page_obj in pages:
+        cached_data = page_obj.candidate_prompts
+        page_topic = cached_data.get('page_topic', '')
+        page_summary = cached_data.get('page_summary', '')
+        generated_at = cached_data.get('generated_at', '')
+        
+        for prompt in cached_data.get('prompts', []):
+            prompt_data = {
+                'page_id': str(page_obj.id),
+                'page_url': page_obj.url,
+                'page_title': page_obj.title,
+                'page_topic': page_topic,
+                'page_summary': page_summary,
+                'text': prompt.get('text', ''),
+                'intent': prompt.get('intent', ''),
+                'funnel_stage': prompt.get('funnel_stage', ''),
+                'topic': prompt.get('topic', ''),
+                'sub_topic': prompt.get('sub_topic', ''),
+                'audience_persona': prompt.get('audience_persona', prompt.get('target_audience', '')),
+                'transaction_score': prompt.get('transaction_score', 0),
+                'citation_trigger': prompt.get('citation_trigger', ''),
+                'reasoning': prompt.get('reasoning', ''),
+                'generated_at': generated_at,
+            }
+            
+            # Apply filters
+            if intent and prompt_data['intent'] != intent:
+                continue
+            if funnel_stage and prompt_data['funnel_stage'] != funnel_stage:
+                continue
+            if search and search.lower() not in prompt_data['text'].lower():
+                continue
+            
+            all_prompts.append(prompt_data)
+    
+    # Sort by transaction score (highest first)
+    all_prompts.sort(key=lambda x: x['transaction_score'], reverse=True)
+    
+    # Pagination
+    total = len(all_prompts)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated_prompts = all_prompts[start:end]
+    
+    # Compute stats
+    stats = {
+        'total_prompts': total,
+        'by_intent': {},
+        'by_funnel_stage': {},
+        'by_audience': {},
+    }
+    
+    for p in all_prompts:
+        intent_val = p['intent'] or 'unknown'
+        funnel_val = p['funnel_stage'] or 'unknown'
+        audience_val = p['audience_persona'] or 'unknown'
+        
+        stats['by_intent'][intent_val] = stats['by_intent'].get(intent_val, 0) + 1
+        stats['by_funnel_stage'][funnel_val] = stats['by_funnel_stage'].get(funnel_val, 0) + 1
+        stats['by_audience'][audience_val] = stats['by_audience'].get(audience_val, 0) + 1
+    
+    return {
+        'prompts': paginated_prompts,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'stats': stats,
+    }
+
+
+@router.get("/candidate-prompts/stats")
+async def get_candidate_prompts_stats(
+    project_id: UUID = Query(..., description="Project ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get statistics about candidate prompts generation status for a project.
+    """
+    # Count total pages
+    total_pages_query = select(func.count()).select_from(Page).where(Page.project_id == project_id)
+    total_pages = await db.scalar(total_pages_query) or 0
+    
+    # Count pages with candidate prompts
+    pages_with_prompts_query = select(func.count()).select_from(Page).where(
+        Page.project_id == project_id,
+        Page.candidate_prompts.isnot(None)
+    )
+    pages_with_prompts = await db.scalar(pages_with_prompts_query) or 0
+    
+    # Count total prompts
+    query = select(Page.candidate_prompts).where(
+        Page.project_id == project_id,
+        Page.candidate_prompts.isnot(None)
+    )
+    result = await db.execute(query)
+    total_prompts = 0
+    by_intent = {}
+    by_funnel_stage = {}
+    
+    for row in result:
+        if row[0] and 'prompts' in row[0]:
+            for p in row[0]['prompts']:
+                total_prompts += 1
+                intent = p.get('intent', 'unknown')
+                funnel = p.get('funnel_stage', 'unknown')
+                by_intent[intent] = by_intent.get(intent, 0) + 1
+                by_funnel_stage[funnel] = by_funnel_stage.get(funnel, 0) + 1
+    
+    return {
+        'total_pages': total_pages,
+        'pages_with_prompts': pages_with_prompts,
+        'pages_without_prompts': total_pages - pages_with_prompts,
+        'total_prompts': total_prompts,
+        'avg_prompts_per_page': round(total_prompts / pages_with_prompts, 1) if pages_with_prompts > 0 else 0,
+        'by_intent': by_intent,
+        'by_funnel_stage': by_funnel_stage,
+        'generation_progress': round((pages_with_prompts / total_pages) * 100, 1) if total_pages > 0 else 0,
+    }
+
+
+@router.get("/export/candidate-prompts")
+async def export_candidate_prompts_csv(
+    project_id: UUID = Query(..., description="Project ID to export prompts for"),
+    include_pages_without_prompts: bool = Query(False, description="Include pages that don't have candidate prompts yet"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Export all candidate prompts for a project as CSV.
+    
+    The CSV is structured for easy processing with LLMs and includes:
+    - Page information (URL, title, topic)
+    - Prompt text and metadata
+    - Intent classification and funnel stage
+    - Audience persona and targeting info
+    - Transaction scores for prioritization
+    """
+    # Get all pages with candidate prompts for this project
+    query = select(Page).where(Page.project_id == project_id)
+    
+    if not include_pages_without_prompts:
+        query = query.where(Page.candidate_prompts.isnot(None))
+    
+    result = await db.execute(query)
+    pages = result.scalars().all()
+    
+    if not pages:
+        raise HTTPException(
+            status_code=404, 
+            detail="No pages with candidate prompts found for this project"
+        )
+    
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow([
+        # Page info
+        'page_url',
+        'page_title',
+        'page_topic',
+        'page_summary',
+        'meta_description',
+        # Prompt info
+        'prompt_text',
+        'intent',
+        'funnel_stage',
+        'topic',
+        'sub_topic',
+        'audience_persona',
+        'transaction_score',
+        'citation_trigger',
+        'reasoning',
+        # Metadata
+        'generated_at',
+        'page_id',
+    ])
+    
+    # Write data rows
+    prompt_count = 0
+    for page in pages:
+        if not page.candidate_prompts:
+            if include_pages_without_prompts:
+                # Write a row for pages without prompts
+                writer.writerow([
+                    page.url,
+                    page.title or '',
+                    '',  # page_topic
+                    '',  # page_summary
+                    page.meta_description or '',
+                    '',  # prompt_text
+                    '',  # intent
+                    '',  # funnel_stage
+                    '',  # topic
+                    '',  # sub_topic
+                    '',  # audience_persona
+                    '',  # transaction_score
+                    '',  # citation_trigger
+                    '',  # reasoning
+                    '',  # generated_at
+                    str(page.id),
+                ])
+            continue
+        
+        cached_data = page.candidate_prompts
+        page_topic = cached_data.get('page_topic', '')
+        page_summary = cached_data.get('page_summary', '')
+        generated_at = cached_data.get('generated_at', '')
+        
+        for prompt in cached_data.get('prompts', []):
+            prompt_count += 1
+            writer.writerow([
+                page.url,
+                page.title or '',
+                page_topic,
+                page_summary,
+                page.meta_description or '',
+                prompt.get('text', ''),
+                prompt.get('intent', ''),
+                prompt.get('funnel_stage', ''),
+                prompt.get('topic', ''),
+                prompt.get('sub_topic', ''),
+                prompt.get('audience_persona', prompt.get('target_audience', '')),
+                prompt.get('transaction_score', ''),
+                prompt.get('citation_trigger', ''),
+                prompt.get('reasoning', ''),
+                generated_at,
+                str(page.id),
+            ])
+    
+    # Get the CSV content
+    output.seek(0)
+    csv_content = output.getvalue()
+    
+    # Create filename with timestamp
+    from datetime import datetime as dt
+    timestamp = dt.utcnow().strftime('%Y%m%d_%H%M%S')
+    filename = f"candidate_prompts_{timestamp}.csv"
+    
+    logger.info(
+        "Exported candidate prompts CSV",
+        project_id=str(project_id),
+        pages=len(pages),
+        prompts=prompt_count,
+    )
+    
+    return StreamingResponse(
+        io.BytesIO(csv_content.encode('utf-8')),
+        media_type='text/csv',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'X-Total-Pages': str(len(pages)),
+            'X-Total-Prompts': str(prompt_count),
+        }
+    )
+
+
+@router.post("/generate-candidate-prompts-batch", response_model=dict)
+async def generate_candidate_prompts_batch(
+    project_id: UUID = Query(..., description="Project ID to generate prompts for"),
+    regenerate: bool = Query(False, description="Regenerate prompts even if cached"),
+    num_prompts: int = Query(5, ge=1, le=10, description="Number of prompts per page"),
+    limit: Optional[int] = Query(None, description="Limit number of pages to process"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate candidate prompts for all pages in a project (batch operation).
+    
+    This is useful for populating prompts before exporting to CSV.
+    Returns immediately with task status - generation happens in background.
+    """
+    from app.workers.nlp_tasks import generate_candidate_prompts_batch
+    
+    # Get pages that need prompts
+    query = select(Page.id).where(Page.project_id == project_id)
+    
+    if not regenerate:
+        query = query.where(Page.candidate_prompts.is_(None))
+    
+    if limit:
+        query = query.limit(limit)
+    
+    result = await db.execute(query)
+    page_ids = [str(row[0]) for row in result.fetchall()]
+    
+    if not page_ids:
+        return {
+            "status": "no_pages",
+            "message": "All pages already have candidate prompts" if not regenerate else "No pages found",
+            "pages_queued": 0,
+        }
+    
+    # Start background task
+    task = generate_candidate_prompts_batch.delay(page_ids, num_prompts)
+    
+    return {
+        "status": "processing",
+        "task_id": task.id,
+        "pages_queued": len(page_ids),
+        "message": f"Generating candidate prompts for {len(page_ids)} pages",
+    }
+
+
 @router.get("/{page_id}/candidate-prompts", response_model=CandidatePromptsResponse)
 async def get_candidate_prompts(
     page_id: UUID,
@@ -423,8 +754,12 @@ async def get_candidate_prompts(
                 text=p.get("text", ""),
                 transaction_score=p.get("transaction_score", 0.0),
                 intent=p.get("intent", "unknown"),
+                funnel_stage=p.get("funnel_stage"),
+                topic=p.get("topic"),
+                sub_topic=p.get("sub_topic"),
+                audience_persona=p.get("audience_persona"),
                 reasoning=p.get("reasoning", ""),
-                target_audience=p.get("target_audience", ""),
+                target_audience=p.get("target_audience", p.get("audience_persona", "")),
                 citation_trigger=p.get("citation_trigger"),
             ))
         
@@ -432,6 +767,8 @@ async def get_candidate_prompts(
             page_id=page.id,
             page_url=page.url,
             page_title=page.title,
+            page_topic=cached_data.get("page_topic"),
+            page_summary=cached_data.get("page_summary"),
             prompts=prompts,
             generated_at=cached_data.get("generated_at"),
             cached=True,
@@ -466,8 +803,12 @@ async def get_candidate_prompts(
             text=p.get("text", ""),
             transaction_score=p.get("transaction_score", 0.0),
             intent=p.get("intent", "unknown"),
+            funnel_stage=p.get("funnel_stage"),
+            topic=p.get("topic"),
+            sub_topic=p.get("sub_topic"),
+            audience_persona=p.get("audience_persona"),
             reasoning=p.get("reasoning", ""),
-            target_audience=p.get("target_audience", ""),
+            target_audience=p.get("target_audience", p.get("audience_persona", "")),
             citation_trigger=p.get("citation_trigger"),
         ))
     
@@ -475,6 +816,8 @@ async def get_candidate_prompts(
         page_id=page.id,
         page_url=page.url,
         page_title=page.title,
+        page_topic=result.get("page_topic"),
+        page_summary=result.get("page_summary"),
         prompts=prompts,
         generated_at=result.get("generated_at"),
         cached=False,

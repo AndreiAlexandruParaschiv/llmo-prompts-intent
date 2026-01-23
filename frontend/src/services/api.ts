@@ -217,8 +217,12 @@ export interface CandidatePrompt {
   text: string
   transaction_score: number
   intent: string
+  funnel_stage?: string  // awareness, consideration, decision
+  topic?: string
+  sub_topic?: string
+  audience_persona?: string
   reasoning: string
-  target_audience: string
+  target_audience?: string  // Legacy field
   citation_trigger?: string
 }
 
@@ -226,6 +230,8 @@ export interface CandidatePromptsResponse {
   page_id: string
   page_url: string
   page_title: string | null
+  page_topic?: string
+  page_summary?: string
   prompts: CandidatePrompt[]
   generated_at: string | null
   cached: boolean
@@ -281,6 +287,64 @@ export const pagesApi = {
     api.get<CandidatePromptsResponse>(`/pages/${pageId}/candidate-prompts`, {
       params: { regenerate, num_prompts: numPrompts }
     }),
+  exportCandidatePromptsCsv: (projectId: string, includePagesWithoutPrompts?: boolean) =>
+    api.get('/pages/export/candidate-prompts', {
+      params: { project_id: projectId, include_pages_without_prompts: includePagesWithoutPrompts },
+      responseType: 'blob'
+    }),
+  generateCandidatePromptsBatch: (projectId: string, regenerate?: boolean, numPrompts?: number, limit?: number) =>
+    api.post<{ status: string; task_id?: string; pages_queued: number; message: string }>(
+      '/pages/generate-candidate-prompts-batch',
+      null,
+      { params: { project_id: projectId, regenerate, num_prompts: numPrompts, limit } }
+    ),
+  listCandidatePrompts: (params: {
+    project_id: string
+    intent?: string
+    funnel_stage?: string
+    search?: string
+    page?: number
+    page_size?: number
+  }) =>
+    api.get<{
+      prompts: Array<{
+        page_id: string
+        page_url: string
+        page_title: string | null
+        page_topic: string
+        page_summary: string
+        text: string
+        intent: string
+        funnel_stage: string
+        topic: string
+        sub_topic: string
+        audience_persona: string
+        transaction_score: number
+        citation_trigger: string
+        reasoning: string
+        generated_at: string
+      }>
+      total: number
+      page: number
+      page_size: number
+      stats: {
+        total_prompts: number
+        by_intent: Record<string, number>
+        by_funnel_stage: Record<string, number>
+        by_audience: Record<string, number>
+      }
+    }>('/pages/candidate-prompts/list', { params }),
+  getCandidatePromptsStats: (projectId: string) =>
+    api.get<{
+      total_pages: number
+      pages_with_prompts: number
+      pages_without_prompts: number
+      total_prompts: number
+      avg_prompts_per_page: number
+      by_intent: Record<string, number>
+      by_funnel_stage: Record<string, number>
+      generation_progress: number
+    }>('/pages/candidate-prompts/stats', { params: { project_id: projectId } }),
 }
 
 // Opportunities
