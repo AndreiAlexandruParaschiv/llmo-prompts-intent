@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
@@ -130,6 +130,35 @@ function OverviewTab({ project, stats }: { project: Project; stats?: ProjectStat
     }
     
     importUrlsMutation.mutate(urls)
+  }
+
+  // File input ref for CSV crawl
+  const csvCrawlInputRef = useRef<HTMLInputElement>(null)
+
+  // Crawl from CSV mutation (with SEO keyword data)
+  const csvCrawlMutation = useMutation({
+    mutationFn: (file: File) => projectsApi.crawlFromCsv(project.id, file),
+    onSuccess: (response) => {
+      const data = response.data
+      toast({ 
+        title: 'CSV Crawl Started', 
+        description: `Crawling ${data.urls_to_crawl} URLs. ${data.urls_with_seo_data} have SEO keyword data.` 
+      })
+      queryClient.invalidateQueries({ queryKey: ['crawl-jobs', project.id] })
+      queryClient.invalidateQueries({ queryKey: ['project-stats', project.id] })
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to start CSV crawl', description: error.message, variant: 'destructive' })
+    },
+  })
+
+  // Handle CSV file selection for crawl
+  const handleCsvCrawlSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      csvCrawlMutation.mutate(file)
+    }
+    e.target.value = ''
   }
 
   const matchMutation = useMutation({
@@ -380,6 +409,27 @@ function OverviewTab({ project, stats }: { project: Project; stats?: ProjectStat
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
+                {/* Hidden file input for CSV crawl */}
+                <input
+                  type="file"
+                  ref={csvCrawlInputRef}
+                  onChange={handleCsvCrawlSelect}
+                  accept=".csv"
+                  className="hidden"
+                />
+                <Button 
+                  variant="outline"
+                  onClick={() => csvCrawlInputRef.current?.click()}
+                  disabled={csvCrawlMutation.isPending || activeCrawl}
+                  title="Upload Ahrefs/SEMrush CSV with URLs and keyword data"
+                >
+                  {csvCrawlMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4 mr-2" />
+                  )}
+                  Crawl from CSV
+                </Button>
                 <Button 
                   variant={crawlComplete ? "outline" : "default"}
                   onClick={() => crawlMutation.mutate()}
