@@ -315,35 +315,6 @@ export default function CandidatePrompts() {
     },
   })
 
-  // File input ref for keyword import
-  const keywordFileInputRef = useRef<HTMLInputElement>(null)
-
-  // Import SEO keywords mutation
-  const importKeywordsMutation = useMutation({
-    mutationFn: (file: File) => pagesApi.importSeoKeywords(projectId!, file),
-    onSuccess: (response) => {
-      const data = response.data
-      toast({
-        title: 'Keywords Imported',
-        description: `Updated ${data.pages_updated} pages with SEO data. ${data.urls_not_found} URLs not found.`,
-      })
-      refetchStats()
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Import failed', description: error.message, variant: 'destructive' })
-    },
-  })
-
-  // Handle keyword file selection
-  const handleKeywordFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      importKeywordsMutation.mutate(file)
-    }
-    // Reset input so same file can be selected again
-    e.target.value = ''
-  }
-
   // Export handler
   const handleExport = async () => {
     if (!projectId) return
@@ -440,28 +411,6 @@ export default function CandidatePrompts() {
           <Button variant="outline" onClick={handleExport} disabled={!stats?.total_prompts}>
             <Download className="w-4 h-4 mr-2" />
             Export CSV
-          </Button>
-
-          {/* Hidden file input for keyword import */}
-          <input
-            type="file"
-            ref={keywordFileInputRef}
-            onChange={handleKeywordFileSelect}
-            accept=".csv"
-            className="hidden"
-          />
-          <Button
-            variant="outline"
-            onClick={() => keywordFileInputRef.current?.click()}
-            disabled={importKeywordsMutation.isPending}
-            title="Import SEO keywords from Ahrefs/SEMrush CSV"
-          >
-            {importKeywordsMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Upload className="w-4 h-4 mr-2" />
-            )}
-            Import Keywords
           </Button>
 
           <Button variant="outline" size="icon" onClick={() => { refetchStats(); refetchPrompts(); }}>
