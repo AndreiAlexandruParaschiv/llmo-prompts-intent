@@ -67,6 +67,7 @@ class CandidatePrompt(BaseModel):
     """Schema for a single candidate prompt."""
     
     text: str
+    prompt_category: Optional[str] = None  # generic, comparison, branded_verify, branded_sentiment
     transaction_score: float
     intent: str
     funnel_stage: Optional[str] = None  # awareness, consideration, decision
@@ -86,6 +87,8 @@ class CandidatePromptsResponse(BaseModel):
     page_title: Optional[str]
     page_topic: Optional[str] = None
     page_summary: Optional[str] = None
+    brand_name: Optional[str] = None
+    product_category: Optional[str] = None
     prompts: List[CandidatePrompt]
     generated_at: Optional[str] = None
     cached: bool = False

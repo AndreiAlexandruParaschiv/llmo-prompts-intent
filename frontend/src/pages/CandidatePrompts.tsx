@@ -60,13 +60,30 @@ const funnelColors: Record<string, string> = {
   decision: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
 }
 
+const categoryColors: Record<string, string> = {
+  generic: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+  comparison: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+  branded_verify: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  branded_sentiment: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+}
+
+const categoryLabels: Record<string, string> = {
+  generic: 'Generic',
+  comparison: 'Comparison',
+  branded_verify: 'Branded (Verify)',
+  branded_sentiment: 'Branded (Sentiment)',
+}
+
 interface CandidatePromptItem {
   page_id: string
   page_url: string
   page_title: string | null
   page_topic: string
   page_summary: string
+  brand_name?: string
+  product_category?: string
   text: string
+  prompt_category: string
   intent: string
   funnel_stage: string
   topic: string
@@ -112,6 +129,13 @@ function PromptCard({ prompt, expanded, onToggle }: {
 
           {/* Badges Row */}
           <div className="flex flex-wrap items-center gap-2">
+            {/* Prompt Category - Most important for filtering */}
+            {prompt.prompt_category && (
+              <Badge className={cn("text-xs font-medium", categoryColors[prompt.prompt_category] || 'bg-slate-100')}>
+                {categoryLabels[prompt.prompt_category] || prompt.prompt_category}
+              </Badge>
+            )}
+            
             {/* Transaction Score */}
             <Badge variant="outline" className="gap-1">
               <TrendingUp className="w-3 h-3" />
@@ -210,6 +234,7 @@ export default function CandidatePrompts() {
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [intentFilter, setIntentFilter] = useState<string>('all')
   const [funnelFilter, setFunnelFilter] = useState<string>('all')
   const [expandedPrompts, setExpandedPrompts] = useState<Set<string>>(new Set())
@@ -227,9 +252,10 @@ export default function CandidatePrompts() {
 
   // Fetch prompts list
   const { data: promptsData, isLoading: promptsLoading, refetch: refetchPrompts } = useQuery({
-    queryKey: ['candidate-prompts-list', projectId, intentFilter, funnelFilter, search, page],
+    queryKey: ['candidate-prompts-list', projectId, categoryFilter, intentFilter, funnelFilter, search, page],
     queryFn: () => pagesApi.listCandidatePrompts({
       project_id: projectId!,
+      prompt_category: categoryFilter === 'all' ? undefined : categoryFilter,
       intent: intentFilter === 'all' ? undefined : intentFilter,
       funnel_stage: funnelFilter === 'all' ? undefined : funnelFilter,
       search: search || undefined,
@@ -247,7 +273,7 @@ export default function CandidatePrompts() {
   // Generate mutation
   const generateMutation = useMutation({
     mutationFn: (regenerate: boolean = false) =>
-      pagesApi.generateCandidatePromptsBatch(projectId!, regenerate, 5),
+      pagesApi.generateCandidatePromptsBatch(projectId!, regenerate, 8),
     onSuccess: (response) => {
       const data = response.data
       if (data.status === 'processing') {
@@ -302,7 +328,7 @@ export default function CandidatePrompts() {
 
   useEffect(() => {
     handleFilterChange()
-  }, [intentFilter, funnelFilter, search])
+  }, [categoryFilter, intentFilter, funnelFilter, search])
 
   if (!projectId) {
     return (
@@ -464,7 +490,31 @@ export default function CandidatePrompts() {
 
           {/* Distribution Charts */}
           {stats.total_prompts > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* By Prompt Category - Most Important */}
+              <Card className="border-slate-200 dark:border-slate-800 md:col-span-1">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-cyan-500" />
+                    By Category
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {stats.by_prompt_category && Object.entries(stats.by_prompt_category).sort((a, b) => b[1] - a[1]).map(([category, count]) => (
+                      <div key={category} className="flex items-center justify-between">
+                        <Badge className={cn("text-xs", categoryColors[category] || 'bg-slate-100')}>
+                          {categoryLabels[category] || category}
+                        </Badge>
+                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                          {count} ({Math.round((count / stats.total_prompts) * 100)}%)
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
               {/* By Intent */}
               <Card className="border-slate-200 dark:border-slate-800">
                 <CardHeader className="pb-2">
@@ -531,6 +581,20 @@ export default function CandidatePrompts() {
                 className="pl-10"
               />
             </div>
+
+            {/* Category Filter - Most Important */}
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="generic">Generic (Citation)</SelectItem>
+                <SelectItem value="comparison">Comparison</SelectItem>
+                <SelectItem value="branded_verify">Branded (Verify)</SelectItem>
+                <SelectItem value="branded_sentiment">Branded (Sentiment)</SelectItem>
+              </SelectContent>
+            </Select>
 
             {/* Intent Filter */}
             <Select value={intentFilter} onValueChange={setIntentFilter}>

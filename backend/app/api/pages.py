@@ -403,6 +403,7 @@ async def generate_orphan_page_suggestions(
 @router.get("/candidate-prompts/list")
 async def list_all_candidate_prompts(
     project_id: UUID = Query(..., description="Project ID"),
+    prompt_category: Optional[str] = Query(None, description="Filter by prompt category (generic, comparison, branded_verify, branded_sentiment)"),
     intent: Optional[str] = Query(None, description="Filter by intent"),
     funnel_stage: Optional[str] = Query(None, description="Filter by funnel stage"),
     search: Optional[str] = Query(None, description="Search in prompt text"),
@@ -429,6 +430,8 @@ async def list_all_candidate_prompts(
         cached_data = page_obj.candidate_prompts
         page_topic = cached_data.get('page_topic', '')
         page_summary = cached_data.get('page_summary', '')
+        brand_name = cached_data.get('brand_name', '')
+        product_category_val = cached_data.get('product_category', '')
         generated_at = cached_data.get('generated_at', '')
         
         for prompt in cached_data.get('prompts', []):
@@ -438,7 +441,10 @@ async def list_all_candidate_prompts(
                 'page_title': page_obj.title,
                 'page_topic': page_topic,
                 'page_summary': page_summary,
+                'brand_name': brand_name,
+                'product_category': product_category_val,
                 'text': prompt.get('text', ''),
+                'prompt_category': prompt.get('prompt_category', ''),
                 'intent': prompt.get('intent', ''),
                 'funnel_stage': prompt.get('funnel_stage', ''),
                 'topic': prompt.get('topic', ''),
@@ -451,6 +457,8 @@ async def list_all_candidate_prompts(
             }
             
             # Apply filters
+            if prompt_category and prompt_data['prompt_category'] != prompt_category:
+                continue
             if intent and prompt_data['intent'] != intent:
                 continue
             if funnel_stage and prompt_data['funnel_stage'] != funnel_stage:
@@ -472,16 +480,19 @@ async def list_all_candidate_prompts(
     # Compute stats
     stats = {
         'total_prompts': total,
+        'by_prompt_category': {},
         'by_intent': {},
         'by_funnel_stage': {},
         'by_audience': {},
     }
     
     for p in all_prompts:
+        category_val = p['prompt_category'] or 'unknown'
         intent_val = p['intent'] or 'unknown'
         funnel_val = p['funnel_stage'] or 'unknown'
         audience_val = p['audience_persona'] or 'unknown'
         
+        stats['by_prompt_category'][category_val] = stats['by_prompt_category'].get(category_val, 0) + 1
         stats['by_intent'][intent_val] = stats['by_intent'].get(intent_val, 0) + 1
         stats['by_funnel_stage'][funnel_val] = stats['by_funnel_stage'].get(funnel_val, 0) + 1
         stats['by_audience'][audience_val] = stats['by_audience'].get(audience_val, 0) + 1
@@ -521,6 +532,7 @@ async def get_candidate_prompts_stats(
     )
     result = await db.execute(query)
     total_prompts = 0
+    by_prompt_category = {}
     by_intent = {}
     by_funnel_stage = {}
     
@@ -528,8 +540,10 @@ async def get_candidate_prompts_stats(
         if row[0] and 'prompts' in row[0]:
             for p in row[0]['prompts']:
                 total_prompts += 1
+                category = p.get('prompt_category', 'unknown')
                 intent = p.get('intent', 'unknown')
                 funnel = p.get('funnel_stage', 'unknown')
+                by_prompt_category[category] = by_prompt_category.get(category, 0) + 1
                 by_intent[intent] = by_intent.get(intent, 0) + 1
                 by_funnel_stage[funnel] = by_funnel_stage.get(funnel, 0) + 1
     
@@ -539,6 +553,7 @@ async def get_candidate_prompts_stats(
         'pages_without_prompts': total_pages - pages_with_prompts,
         'total_prompts': total_prompts,
         'avg_prompts_per_page': round(total_prompts / pages_with_prompts, 1) if pages_with_prompts > 0 else 0,
+        'by_prompt_category': by_prompt_category,
         'by_intent': by_intent,
         'by_funnel_stage': by_funnel_stage,
         'generation_progress': round((pages_with_prompts / total_pages) * 100, 1) if total_pages > 0 else 0,
@@ -585,11 +600,14 @@ async def export_candidate_prompts_csv(
         # Page info
         'page_url',
         'page_title',
+        'brand_name',
+        'product_category',
         'page_topic',
         'page_summary',
         'meta_description',
         # Prompt info
         'prompt_text',
+        'prompt_category',
         'intent',
         'funnel_stage',
         'topic',
@@ -612,10 +630,13 @@ async def export_candidate_prompts_csv(
                 writer.writerow([
                     page.url,
                     page.title or '',
+                    '',  # brand_name
+                    '',  # product_category
                     '',  # page_topic
                     '',  # page_summary
                     page.meta_description or '',
                     '',  # prompt_text
+                    '',  # prompt_category
                     '',  # intent
                     '',  # funnel_stage
                     '',  # topic
@@ -630,6 +651,8 @@ async def export_candidate_prompts_csv(
             continue
         
         cached_data = page.candidate_prompts
+        brand_name = cached_data.get('brand_name', '')
+        product_category_val = cached_data.get('product_category', '')
         page_topic = cached_data.get('page_topic', '')
         page_summary = cached_data.get('page_summary', '')
         generated_at = cached_data.get('generated_at', '')
@@ -639,10 +662,13 @@ async def export_candidate_prompts_csv(
             writer.writerow([
                 page.url,
                 page.title or '',
+                brand_name,
+                product_category_val,
                 page_topic,
                 page_summary,
                 page.meta_description or '',
                 prompt.get('text', ''),
+                prompt.get('prompt_category', ''),
                 prompt.get('intent', ''),
                 prompt.get('funnel_stage', ''),
                 prompt.get('topic', ''),

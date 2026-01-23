@@ -300,6 +300,7 @@ export const pagesApi = {
     ),
   listCandidatePrompts: (params: {
     project_id: string
+    prompt_category?: string
     intent?: string
     funnel_stage?: string
     search?: string
@@ -313,7 +314,10 @@ export const pagesApi = {
         page_title: string | null
         page_topic: string
         page_summary: string
+        brand_name: string
+        product_category: string
         text: string
+        prompt_category: string
         intent: string
         funnel_stage: string
         topic: string
@@ -329,6 +333,7 @@ export const pagesApi = {
       page_size: number
       stats: {
         total_prompts: number
+        by_prompt_category: Record<string, number>
         by_intent: Record<string, number>
         by_funnel_stage: Record<string, number>
         by_audience: Record<string, number>
@@ -341,6 +346,7 @@ export const pagesApi = {
       pages_without_prompts: number
       total_prompts: number
       avg_prompts_per_page: number
+      by_prompt_category: Record<string, number>
       by_intent: Record<string, number>
       by_funnel_stage: Record<string, number>
       generation_progress: number
