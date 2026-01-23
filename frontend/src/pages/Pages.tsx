@@ -14,8 +14,6 @@ import {
   Languages,
   Code,
   Link2,
-  Download,
-  Sparkles,
   Loader2,
   Upload,
   ChevronDown,
@@ -29,7 +27,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { pagesApi, projectsApi, Page } from '@/services/api'
 import { useProjectStore } from '@/stores/projectStore'
@@ -226,44 +223,6 @@ export default function Pages() {
     e.target.value = ''
   }
 
-  // Generate candidate prompts batch mutation
-  const generatePromptsMutation = useMutation({
-    mutationFn: (regenerate: boolean = false) => 
-      pagesApi.generateCandidatePromptsBatch(selectedProjectId!, regenerate, 5),
-    onSuccess: (response) => {
-      const data = response.data
-      if (data.status === 'processing') {
-        toast({ 
-          title: 'Generating Candidate Prompts', 
-          description: `Processing ${data.pages_queued} pages. This may take a few minutes.` 
-        })
-      } else if (data.status === 'no_pages') {
-        toast({ title: 'No Pages to Process', description: data.message })
-      }
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to generate prompts', description: error.message, variant: 'destructive' })
-    },
-  })
-
-  // Export candidate prompts as CSV
-  const handleExportCandidatePrompts = async () => {
-    if (!selectedProjectId) return
-    try {
-      const response = await pagesApi.exportCandidatePromptsCsv(selectedProjectId)
-      const blob = new Blob([response.data], { type: 'text/csv' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `candidate-prompts-${selectedProjectId}.csv`
-      a.click()
-      window.URL.revokeObjectURL(url)
-      toast({ title: 'Export Complete', description: 'Candidate prompts CSV downloaded successfully.' })
-    } catch (error) {
-      toast({ title: 'Export failed', description: 'No candidate prompts found. Generate prompts first.', variant: 'destructive' })
-    }
-  }
-
   const pages = data?.data?.pages || []
   const total = data?.data?.total || 0
   const pageSize = 20
@@ -281,41 +240,6 @@ export default function Pages() {
         </div>
         {selectedProjectId && (
           <div className="flex items-center gap-2">
-            {/* Candidate Prompts Actions */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <Sparkles className="w-4 h-4" />
-                  Candidate Prompts
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem 
-                  onClick={() => generatePromptsMutation.mutate(false)}
-                  disabled={generatePromptsMutation.isPending}
-                >
-                  {generatePromptsMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4 mr-2" />
-                  )}
-                  Generate for All Pages
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={() => generatePromptsMutation.mutate(true)}
-                  disabled={generatePromptsMutation.isPending}
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Regenerate All
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleExportCandidatePrompts}>
-                  <Download className="w-4 h-4 mr-2" />
-                  Export as CSV
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             {/* Hidden file input for CSV crawl */}
             <input
               type="file"
