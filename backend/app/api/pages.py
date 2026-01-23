@@ -2,7 +2,7 @@
 
 from typing import Optional, List
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
@@ -18,6 +18,7 @@ from datetime import datetime
 from fastapi.responses import StreamingResponse
 import csv
 import io
+import codecs
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -798,6 +799,161 @@ async def cancel_candidate_prompts_generation(
     }
 
 
+@router.post("/import-seo-keywords", response_model=dict)
+async def import_seo_keywords(
+    project_id: UUID = Query(..., description="Project ID to import keywords for"),
+    file: UploadFile = File(..., description="CSV file with SEO keyword data (Ahrefs/SEMrush format)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Import SEO keyword data from CSV (Ahrefs, SEMrush, or similar tools).
+    
+    Matches URLs in the CSV with existing pages and stores:
+    - Top keyword and volume
+    - Traffic data
+    - Keywords count
+    - Referring domains
+    
+    This data is used to improve candidate prompt generation.
+    """
+    content = await file.read()
+    
+    # Try to decode - handle UTF-16 (common for Ahrefs exports) or UTF-8
+    try:
+        # Try UTF-16 first (Ahrefs often exports in UTF-16)
+        text = content.decode('utf-16')
+    except (UnicodeDecodeError, UnicodeError):
+        try:
+            # Try UTF-8 with BOM
+            text = content.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            # Fall back to UTF-8
+            text = content.decode('utf-8')
+    
+    # Parse CSV (tab-separated for Ahrefs)
+    lines = text.strip().split('\n')
+    if not lines:
+        raise HTTPException(status_code=400, detail="Empty CSV file")
+    
+    # Detect delimiter (tab or comma)
+    delimiter = '\t' if '\t' in lines[0] else ','
+    reader = csv.DictReader(lines, delimiter=delimiter)
+    
+    # Normalize column names (remove quotes, lowercase)
+    def normalize_col(col):
+        return col.strip().strip('"').lower().replace(' ', '_')
+    
+    # Get all pages for this project (for URL matching)
+    query = select(Page).where(Page.project_id == project_id)
+    result = await db.execute(query)
+    pages = {page.url: page for page in result.scalars().all()}
+    
+    # Also create a mapping without trailing slashes for fuzzy matching
+    pages_normalized = {}
+    for url, page in pages.items():
+        norm_url = url.rstrip('/')
+        pages_normalized[norm_url] = page
+        pages_normalized[url] = page
+    
+    updated = 0
+    not_found = 0
+    
+    for row in reader:
+        # Normalize the row keys
+        row_normalized = {normalize_col(k): v.strip().strip('"') for k, v in row.items()}
+        
+        # Get URL from row
+        url = row_normalized.get('url', '')
+        if not url:
+            continue
+        
+        # Try to match with existing page
+        page = pages_normalized.get(url) or pages_normalized.get(url.rstrip('/'))
+        
+        if not page:
+            not_found += 1
+            continue
+        
+        # Extract SEO data from row
+        seo_data = {
+            'imported_at': datetime.utcnow().isoformat(),
+        }
+        
+        # Top keyword (current or previous)
+        top_kw = row_normalized.get('current_top_keyword') or row_normalized.get('top_keyword') or row_normalized.get('keyword')
+        if top_kw:
+            seo_data['top_keyword'] = top_kw
+        
+        # Keyword volume
+        kw_vol = row_normalized.get('current_top_keyword:_volume') or row_normalized.get('volume') or row_normalized.get('search_volume')
+        if kw_vol:
+            try:
+                seo_data['keyword_volume'] = int(float(kw_vol.replace(',', '')))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Traffic
+        traffic = row_normalized.get('current_traffic') or row_normalized.get('traffic')
+        if traffic:
+            try:
+                seo_data['traffic'] = int(float(traffic.replace(',', '')))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Traffic value
+        traffic_val = row_normalized.get('current_traffic_value') or row_normalized.get('traffic_value')
+        if traffic_val:
+            try:
+                seo_data['traffic_value'] = float(traffic_val.replace(',', ''))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Keywords count
+        kw_count = row_normalized.get('current_#_of_keywords') or row_normalized.get('keywords') or row_normalized.get('keywords_count')
+        if kw_count:
+            try:
+                seo_data['keywords_count'] = int(float(kw_count.replace(',', '')))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Referring domains
+        ref_domains = row_normalized.get('current_referring_domains') or row_normalized.get('referring_domains')
+        if ref_domains:
+            try:
+                seo_data['referring_domains'] = int(float(ref_domains.replace(',', '')))
+            except (ValueError, AttributeError):
+                pass
+        
+        # URL Rating
+        ur = row_normalized.get('ur') or row_normalized.get('url_rating')
+        if ur:
+            try:
+                seo_data['url_rating'] = float(ur)
+            except (ValueError, AttributeError):
+                pass
+        
+        # Update page if we have meaningful data
+        if len(seo_data) > 1:  # More than just imported_at
+            page.seo_data = seo_data
+            updated += 1
+    
+    await db.commit()
+    
+    logger.info(
+        "Imported SEO keywords",
+        project_id=str(project_id),
+        updated=updated,
+        not_found=not_found,
+    )
+    
+    return {
+        "status": "success",
+        "pages_updated": updated,
+        "urls_not_found": not_found,
+        "message": f"Updated SEO data for {updated} pages. {not_found} URLs not found in project.",
+    }
+
+
 @router.get("/{page_id}/candidate-prompts", response_model=CandidatePromptsResponse)
 async def get_candidate_prompts(
     page_id: UUID,
@@ -856,6 +1012,7 @@ async def get_candidate_prompts(
         page_title=page.title or "",
         page_content=page.content or "",
         meta_description=page.meta_description,
+        seo_data=page.seo_data,  # Include SEO keyword data if available
         num_prompts=num_prompts,
     )
     

@@ -357,6 +357,18 @@ export const pagesApi = {
       null,
       { params: { project_id: projectId } }
     ),
+  importSeoKeywords: (projectId: string, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<{ status: string; pages_updated: number; urls_not_found: number; message: string }>(
+      '/pages/import-seo-keywords',
+      formData,
+      {
+        params: { project_id: projectId },
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }
+    )
+  },
 }
 
 // Opportunities

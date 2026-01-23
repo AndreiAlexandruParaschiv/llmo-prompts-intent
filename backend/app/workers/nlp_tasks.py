@@ -173,12 +173,13 @@ def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int
         
         for i, page in enumerate(pages):
             try:
-                # Generate candidate prompts
+                # Generate candidate prompts (include SEO data if available)
                 result = azure_openai_service.generate_candidate_prompts(
                     page_url=page.url,
                     page_title=page.title or "",
                     page_content=page.content or "",
                     meta_description=page.meta_description,
+                    seo_data=page.seo_data,  # Pass SEO keyword data if available
                     num_prompts=num_prompts,
                 )
                 

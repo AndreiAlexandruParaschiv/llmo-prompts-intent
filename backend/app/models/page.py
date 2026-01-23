@@ -90,6 +90,18 @@ class Page(Base, UUIDMixin, TimestampMixin):
     #   "generated_at": "2024-01-15T10:30:00Z"
     # }
     
+    # SEO data from tools like Ahrefs, SEMrush (keywords, traffic, etc.)
+    seo_data = Column(JSONB, nullable=True)
+    # Example: {
+    #   "top_keyword": "buick enclave",
+    #   "keyword_volume": 138000,
+    #   "traffic": 42212,
+    #   "traffic_value": 47226.71,
+    #   "keywords_count": 1864,
+    #   "referring_domains": 228,
+    #   "imported_at": "2024-01-15T10:30:00Z"
+    # }
+    
     # Relationships
     project = relationship("Project", back_populates="pages")
     crawl_job = relationship("CrawlJob", back_populates="pages")
