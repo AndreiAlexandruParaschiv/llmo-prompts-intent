@@ -2,9 +2,11 @@
 
 from typing import Optional
 from uuid import UUID, uuid4
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+import csv
+from datetime import datetime
 
 from app.core.database import get_db
 from app.core.logging import get_logger
@@ -250,6 +252,167 @@ async def start_crawl(
         "crawl_job_id": str(crawl_job.id),
         "task_id": task.id,
         "status": "started",
+    }
+
+
+@router.post("/{project_id}/crawl-from-csv", response_model=dict)
+async def crawl_from_csv(
+    project_id: UUID,
+    file: UploadFile = File(..., description="CSV file with URLs and SEO data (Ahrefs/SEMrush format)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Start a crawl job from a CSV file containing URLs and SEO keyword data.
+    
+    The CSV should have columns like:
+    - URL: The page URL to crawl
+    - Current top keyword / top_keyword: Primary keyword
+    - Current top keyword: Volume / volume: Search volume
+    - Current traffic / traffic: Monthly traffic
+    
+    This will:
+    1. Extract URLs from the CSV
+    2. Crawl each URL
+    3. Store SEO keyword data alongside each page
+    """
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Read and parse CSV
+    content = await file.read()
+    
+    # Try to decode - handle UTF-16 (Ahrefs) or UTF-8
+    try:
+        text = content.decode('utf-16')
+    except (UnicodeDecodeError, UnicodeError):
+        try:
+            text = content.decode('utf-8-sig')
+        except UnicodeDecodeError:
+            text = content.decode('utf-8')
+    
+    lines = text.strip().split('\n')
+    if not lines:
+        raise HTTPException(status_code=400, detail="Empty CSV file")
+    
+    # Detect delimiter
+    delimiter = '\t' if '\t' in lines[0] else ','
+    reader = csv.DictReader(lines, delimiter=delimiter)
+    
+    def normalize_col(col):
+        return col.strip().strip('"').lower().replace(' ', '_')
+    
+    # Parse URLs and SEO data
+    urls_to_crawl = []
+    seo_data_by_url = {}
+    
+    for row in reader:
+        row_normalized = {normalize_col(k): v.strip().strip('"') for k, v in row.items()}
+        
+        url = row_normalized.get('url', '')
+        if not url:
+            continue
+        
+        urls_to_crawl.append(url)
+        
+        # Extract SEO data
+        seo_data = {'imported_at': datetime.utcnow().isoformat()}
+        
+        # Top keyword
+        top_kw = row_normalized.get('current_top_keyword') or row_normalized.get('top_keyword') or row_normalized.get('keyword')
+        if top_kw:
+            seo_data['top_keyword'] = top_kw
+        
+        # Keyword volume
+        kw_vol = row_normalized.get('current_top_keyword:_volume') or row_normalized.get('volume') or row_normalized.get('search_volume')
+        if kw_vol:
+            try:
+                seo_data['keyword_volume'] = int(float(kw_vol.replace(',', '')))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Traffic
+        traffic = row_normalized.get('current_traffic') or row_normalized.get('traffic')
+        if traffic:
+            try:
+                seo_data['traffic'] = int(float(traffic.replace(',', '')))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Traffic value
+        traffic_val = row_normalized.get('current_traffic_value') or row_normalized.get('traffic_value')
+        if traffic_val:
+            try:
+                seo_data['traffic_value'] = float(traffic_val.replace(',', ''))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Keywords count
+        kw_count = row_normalized.get('current_#_of_keywords') or row_normalized.get('keywords') or row_normalized.get('keywords_count')
+        if kw_count:
+            try:
+                seo_data['keywords_count'] = int(float(kw_count.replace(',', '')))
+            except (ValueError, AttributeError):
+                pass
+        
+        # Referring domains
+        ref_domains = row_normalized.get('current_referring_domains') or row_normalized.get('referring_domains')
+        if ref_domains:
+            try:
+                seo_data['referring_domains'] = int(float(ref_domains.replace(',', '')))
+            except (ValueError, AttributeError):
+                pass
+        
+        # URL Rating
+        ur = row_normalized.get('ur') or row_normalized.get('url_rating')
+        if ur:
+            try:
+                seo_data['url_rating'] = float(ur)
+            except (ValueError, AttributeError):
+                pass
+        
+        if len(seo_data) > 1:  # More than just imported_at
+            seo_data_by_url[url] = seo_data
+            # Also store without trailing slash for matching
+            seo_data_by_url[url.rstrip('/')] = seo_data
+    
+    if not urls_to_crawl:
+        raise HTTPException(status_code=400, detail="No valid URLs found in CSV")
+    
+    # Create crawl job with SEO data in config
+    crawl_job = CrawlJob(
+        id=uuid4(),
+        project_id=project_id,
+        status=CrawlStatus.PENDING,
+        config={
+            "start_urls": urls_to_crawl,
+            "seo_data": seo_data_by_url,  # Store SEO data for later use
+            **project.crawl_config,
+        },
+    )
+    db.add(crawl_job)
+    await db.commit()
+    
+    # Start Celery task
+    from app.workers.crawler_tasks import crawl_url_list_with_seo
+    task = crawl_url_list_with_seo.delay(str(crawl_job.id), urls_to_crawl, seo_data_by_url)
+    
+    crawl_job.celery_task_id = task.id
+    await db.commit()
+    
+    logger.info(
+        "Started CSV crawl with SEO data",
+        project_id=str(project_id),
+        urls=len(urls_to_crawl),
+        urls_with_seo=len(seo_data_by_url),
+    )
+    
+    return {
+        "crawl_job_id": str(crawl_job.id),
+        "task_id": task.id,
+        "status": "started",
+        "urls_to_crawl": len(urls_to_crawl),
+        "urls_with_seo_data": len(seo_data_by_url) // 2,  # Divide by 2 because we store with/without trailing slash
     }
 
 

@@ -303,6 +303,174 @@ def crawl_single_url(project_id: str, url: str):
         db.close()
 
 
+@celery_app.task(bind=True, name="crawl_url_list_with_seo")
+def crawl_url_list_with_seo(self, crawl_job_id: str, urls: List[str], seo_data_by_url: dict | None = None):
+    """
+    Crawl a list of URLs and store SEO keyword data alongside each page.
+    
+    Args:
+        crawl_job_id: The crawl job ID
+        urls: List of URLs to crawl
+        seo_data_by_url: Dict mapping URL -> SEO data (keywords, traffic, etc.)
+    """
+    logger.info("Starting URL list crawl with SEO data", job_id=crawl_job_id, url_count=len(urls))
+    
+    seo_data_by_url = seo_data_by_url or {}
+    
+    db = SessionLocal()
+    
+    try:
+        crawl_job = db.query(CrawlJob).filter(CrawlJob.id == UUID(crawl_job_id)).first()
+        if not crawl_job:
+            logger.error("Crawl job not found", job_id=crawl_job_id)
+            return {"error": "Crawl job not found"}
+        
+        # Update status
+        crawl_job.status = CrawlStatus.RUNNING
+        crawl_job.started_at = datetime.utcnow()
+        crawl_job.total_urls = len(urls)
+        db.commit()
+        
+        pages_created = []
+        errors = []
+        
+        for i, url in enumerate(urls):
+            try:
+                # Crawl page
+                page_data = run_async(crawler.crawl_page(url))
+                
+                if page_data.get("error"):
+                    errors.append({
+                        "url": url,
+                        "error": page_data["error"],
+                        "timestamp": datetime.utcnow().isoformat()
+                    })
+                    crawl_job.failed_urls += 1
+                else:
+                    # Get SEO data for this URL (try with and without trailing slash)
+                    seo_data = seo_data_by_url.get(url) or seo_data_by_url.get(url.rstrip('/')) or seo_data_by_url.get(url + '/')
+                    
+                    # Check if URL already exists for this project (deduplication)
+                    existing_page = db.query(Page).filter(
+                        Page.project_id == crawl_job.project_id,
+                        Page.url == page_data["url"]
+                    ).first()
+                    
+                    if existing_page:
+                        # Update existing page
+                        page = existing_page
+                        page.crawl_job_id = crawl_job.id
+                        page.canonical_url = page_data.get("canonical_url")
+                        page.status_code = page_data.get("status_code")
+                        page.content_type = page_data.get("content_type")
+                        page.title = page_data.get("title")
+                        page.meta_description = page_data.get("meta_description")
+                        page.content = page_data.get("content")
+                        page.word_count = str(page_data.get("word_count", 0))
+                        page.html_snapshot_path = page_data.get("html_snapshot_path")
+                        page.structured_data = page_data.get("structured_data", [])
+                        page.hreflang_tags = page_data.get("hreflang_tags", [])
+                        page.crawled_at = page_data.get("crawled_at")
+                        # Store SEO data
+                        if seo_data:
+                            page.seo_data = seo_data
+                    else:
+                        # Create new page record
+                        page = Page(
+                            project_id=crawl_job.project_id,
+                            crawl_job_id=crawl_job.id,
+                            url=page_data["url"],
+                            canonical_url=page_data.get("canonical_url"),
+                            status_code=page_data.get("status_code"),
+                            content_type=page_data.get("content_type"),
+                            title=page_data.get("title"),
+                            meta_description=page_data.get("meta_description"),
+                            content=page_data.get("content"),
+                            word_count=str(page_data.get("word_count", 0)),
+                            html_snapshot_path=page_data.get("html_snapshot_path"),
+                            structured_data=page_data.get("structured_data", []),
+                            hreflang_tags=page_data.get("hreflang_tags", []),
+                            crawled_at=page_data.get("crawled_at"),
+                            seo_data=seo_data,  # Store SEO data
+                        )
+                        db.add(page)
+                    
+                    # Generate embedding immediately for this page
+                    text_parts = []
+                    if page.title:
+                        text_parts.append(page.title)
+                    if page.meta_description:
+                        text_parts.append(page.meta_description)
+                    if page.content:
+                        text_parts.append(page.content[:2000])
+                    if text_parts:
+                        page.embedding = embedding_service.encode(" ".join(text_parts))
+                    
+                    pages_created.append(page)
+                    crawl_job.crawled_urls += 1
+                
+                db.commit()
+                
+                # Report progress
+                self.update_state(
+                    state="PROGRESS",
+                    meta={
+                        "crawled": crawl_job.crawled_urls,
+                        "failed": crawl_job.failed_urls,
+                        "total": crawl_job.total_urls,
+                        "current_url": url,
+                        "progress_percent": int((i + 1) / len(urls) * 100),
+                    }
+                )
+                
+                # Rate limiting
+                time.sleep(settings.CRAWLER_RATE_LIMIT)
+                
+            except Exception as e:
+                logger.error("Error crawling URL", url=url, error=str(e))
+                errors.append({
+                    "url": url,
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                crawl_job.failed_urls += 1
+                db.commit()
+        
+        # Complete job
+        crawl_job.status = CrawlStatus.COMPLETED
+        crawl_job.completed_at = datetime.utcnow()
+        crawl_job.errors = errors
+        db.commit()
+        
+        logger.info(
+            "URL list crawl with SEO completed",
+            job_id=crawl_job_id,
+            crawled=crawl_job.crawled_urls,
+            failed=crawl_job.failed_urls,
+        )
+        
+        return {
+            "status": "completed",
+            "crawled": crawl_job.crawled_urls,
+            "failed": crawl_job.failed_urls,
+            "pages_created": len(pages_created),
+        }
+        
+    except Exception as e:
+        logger.error("URL list crawl with SEO failed", job_id=crawl_job_id, error=str(e))
+        
+        if crawl_job:
+            crawl_job.status = CrawlStatus.FAILED
+            crawl_job.error_message = str(e)[:1000]
+            crawl_job.completed_at = datetime.utcnow()
+            db.commit()
+        
+        raise
+    
+    finally:
+        db.close()
+
+
 @celery_app.task(bind=True, name="crawl_url_list")
 def crawl_url_list(self, crawl_job_id: str, urls: List[str]):
     """

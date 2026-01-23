@@ -134,6 +134,19 @@ export const projectsApi = {
   getStats: (id: string) => api.get<ProjectStats>(`/projects/${id}/stats`),
   startCrawl: (id: string, startUrls?: string[]) =>
     api.post(`/projects/${id}/crawl`, { start_urls: startUrls }),
+  crawlFromCsv: (id: string, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<{
+      crawl_job_id: string
+      task_id: string
+      status: string
+      urls_to_crawl: number
+      urls_with_seo_data: number
+    }>(`/projects/${id}/crawl-from-csv`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   runMatching: (id: string) => api.post(`/projects/${id}/match`),
 }
 

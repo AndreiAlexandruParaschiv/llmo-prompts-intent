@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import {
@@ -17,6 +17,8 @@ import {
   Download,
   Sparkles,
   Loader2,
+  Upload,
+  ChevronDown,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -183,6 +185,9 @@ export default function Pages() {
   
   const pageStats = statsData?.data
 
+  // File input ref for CSV crawl
+  const csvFileInputRef = useRef<HTMLInputElement>(null)
+
   // Start crawl mutation
   const crawlMutation = useMutation({
     mutationFn: () => projectsApi.startCrawl(selectedProjectId!),
@@ -194,6 +199,32 @@ export default function Pages() {
       toast({ title: 'Failed to start crawl', description: error.message, variant: 'destructive' })
     },
   })
+
+  // Crawl from CSV mutation (with SEO keyword data)
+  const csvCrawlMutation = useMutation({
+    mutationFn: (file: File) => projectsApi.crawlFromCsv(selectedProjectId!, file),
+    onSuccess: (response) => {
+      const data = response.data
+      toast({ 
+        title: 'CSV Crawl Started', 
+        description: `Crawling ${data.urls_to_crawl} URLs. ${data.urls_with_seo_data} have SEO keyword data.` 
+      })
+      queryClient.invalidateQueries({ queryKey: ['crawl-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['pages'] })
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to start CSV crawl', description: error.message, variant: 'destructive' })
+    },
+  })
+
+  // Handle CSV file selection for crawl
+  const handleCsvFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      csvCrawlMutation.mutate(file)
+    }
+    e.target.value = ''
+  }
 
   // Generate candidate prompts batch mutation
   const generatePromptsMutation = useMutation({
@@ -285,18 +316,41 @@ export default function Pages() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button
-              onClick={() => crawlMutation.mutate()}
-              disabled={crawlMutation.isPending}
-              className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
-            >
-              {crawlMutation.isPending ? (
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4 mr-2" />
-              )}
-              Start Crawl
-            </Button>
+            {/* Hidden file input for CSV crawl */}
+            <input
+              type="file"
+              ref={csvFileInputRef}
+              onChange={handleCsvFileSelect}
+              accept=".csv"
+              className="hidden"
+            />
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  disabled={crawlMutation.isPending || csvCrawlMutation.isPending}
+                  className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600"
+                >
+                  {(crawlMutation.isPending || csvCrawlMutation.isPending) ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4 mr-2" />
+                  )}
+                  Crawl
+                  <ChevronDown className="w-4 h-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => crawlMutation.mutate()}>
+                  <Play className="w-4 h-4 mr-2" />
+                  Start Crawl (from domains)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => csvFileInputRef.current?.click()}>
+                  <Upload className="w-4 h-4 mr-2" />
+                  Crawl from CSV (with keywords)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
@@ -449,13 +503,23 @@ export default function Pages() {
                 : 'Select a project to view and crawl pages.'}
             </p>
             {selectedProjectId && (
-              <Button
-                onClick={() => crawlMutation.mutate()}
-                disabled={crawlMutation.isPending}
-              >
-                <Play className="w-4 h-4 mr-2" />
-                Start Crawl
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => crawlMutation.mutate()}
+                  disabled={crawlMutation.isPending || csvCrawlMutation.isPending}
+                >
+                  <Play className="w-4 h-4 mr-2" />
+                  Start Crawl
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => csvFileInputRef.current?.click()}
+                  disabled={crawlMutation.isPending || csvCrawlMutation.isPending}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Crawl from CSV
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
