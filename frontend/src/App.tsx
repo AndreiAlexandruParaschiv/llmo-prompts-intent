@@ -9,13 +9,18 @@ import PromptDetail from '@/pages/PromptDetail'
 import Pages from '@/pages/Pages'
 import Opportunities from '@/pages/Opportunities'
 import OrphanPages from '@/pages/OrphanPages'
+import CandidatePrompts from '@/pages/CandidatePrompts'
 import CompetitiveAnalysis from '@/pages/CompetitiveAnalysis'
 import Import from '@/pages/Import'
+import OffsiteRoadmap from '@/pages/OffsiteRoadmap'
 
 function App() {
   return (
     <>
       <Routes>
+        {/* Standalone roadmap page (full screen, no layout) */}
+        <Route path="/offsite-roadmap" element={<OffsiteRoadmap />} />
+        
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
@@ -26,6 +31,7 @@ function App() {
           <Route path="prompts/:promptId" element={<PromptDetail />} />
           <Route path="pages" element={<Pages />} />
           <Route path="orphan-pages" element={<OrphanPages />} />
+          <Route path="candidate-prompts" element={<CandidatePrompts />} />
           <Route path="competitive" element={<CompetitiveAnalysis />} />
           <Route path="opportunities" element={<Opportunities />} />
         </Route>
