@@ -147,6 +147,34 @@ export const projectsApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
+  importExamplePrompts: (id: string, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post<{
+      status: string
+      prompts_imported: number
+      prompts_skipped: number
+      total_examples: number
+      branded_count: number
+      generic_count: number
+      message: string
+    }>(`/projects/${id}/import-example-prompts`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  getExamplePrompts: (id: string) =>
+    api.get<{
+      prompts: Array<{
+        prompt: string
+        topic: string
+        category: string
+        origin: string
+      }>
+      total: number
+      branded_count: number
+      generic_count: number
+      topics: string[]
+    }>(`/projects/${id}/example-prompts`),
   runMatching: (id: string) => api.post(`/projects/${id}/match`),
 }
 

@@ -393,6 +393,7 @@ Generate suggested prompts as natural questions:"""
         page_content: str,
         meta_description: Optional[str] = None,
         seo_data: Optional[Dict[str, Any]] = None,
+        example_prompts: Optional[List[Dict[str, str]]] = None,
         num_prompts: int = 8
     ) -> Optional[Dict[str, Any]]:
         """
@@ -405,6 +406,8 @@ Generate suggested prompts as natural questions:"""
         Args:
             seo_data: Optional SEO data with top keywords, traffic, etc.
                       e.g. {"top_keyword": "buick enclave", "keyword_volume": 138000, "traffic": 42212}
+            example_prompts: Optional list of human-provided prompt examples for few-shot learning
+                      e.g. [{"prompt": "Is Buick Enclave a good car?", "category": "branded"}, ...]
         
         Returns dict with:
         - prompts: List of candidate prompts with transaction scores, categories, and reasoning
@@ -434,6 +437,31 @@ Generate suggested prompts as natural questions:"""
                 if traffic:
                     seo_context += f"- Current organic traffic: {traffic:,} visits/month\n"
                 seo_context += "\nIMPORTANT: Use this keyword data to generate more relevant prompts that match real user search behavior."
+        
+        # Build examples context if available (only use human-provided examples)
+        examples_context = ""
+        if example_prompts and len(example_prompts) > 0:
+            # Filter to only human-provided examples
+            human_examples = [p for p in example_prompts if p.get('origin') == 'human']
+            
+            if human_examples:
+                # Separate into branded and generic examples
+                generic_examples = [p for p in human_examples if p.get('category') == 'generic'][:5]
+                branded_examples = [p for p in human_examples if p.get('category') == 'branded'][:5]
+                
+                examples_context = "\n\nREAL HUMAN PROMPT EXAMPLES (use these as inspiration for tone and style):\n"
+                
+                if generic_examples:
+                    examples_context += "\nGENERIC prompts (no brand name):\n"
+                    for ex in generic_examples:
+                        examples_context += f'- "{ex.get("prompt", "")}"\n'
+                
+                if branded_examples:
+                    examples_context += "\nBRANDED prompts (with brand name):\n"
+                    for ex in branded_examples:
+                        examples_context += f'- "{ex.get("prompt", "")}"\n'
+                
+                examples_context += "\nIMPORTANT: Generate prompts that match the natural, conversational style of these human examples."
         
         try:
             response = self.client.chat.completions.create(
@@ -514,7 +542,7 @@ IMPORTANT: Ensure a good mix - approximately 50-60% generic prompts and 40-50% b
 
 URL: {page_url}
 Title: {page_title}
-{meta_info}{seo_context}
+{meta_info}{seo_context}{examples_context}
 
 Content excerpt:
 {content_excerpt}

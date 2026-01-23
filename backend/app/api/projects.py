@@ -416,6 +416,145 @@ async def crawl_from_csv(
     }
 
 
+@router.post("/{project_id}/import-example-prompts", response_model=dict)
+async def import_example_prompts(
+    project_id: UUID,
+    file: UploadFile = File(..., description="CSV file with human prompt examples"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Import human prompt examples to use as few-shot learning when generating candidate prompts.
+    
+    The CSV should have columns like:
+    - prompt: The actual question/query
+    - topic: Topic category (e.g., "enclave", "suvs")
+    - category: Optional - "branded" or "generic" (or determine from content)
+    - origin: Optional - "human" or "ai" (prefer human)
+    
+    These examples help the AI generate more natural, human-like prompts.
+    """
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Read and parse CSV
+    content = await file.read()
+    
+    # Try to decode
+    try:
+        text = content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        text = content.decode('utf-8')
+    
+    lines = text.strip().split('\n')
+    if not lines:
+        raise HTTPException(status_code=400, detail="Empty CSV file")
+    
+    # Detect delimiter
+    delimiter = '\t' if '\t' in lines[0] else ','
+    reader = csv.DictReader(lines, delimiter=delimiter)
+    
+    def normalize_col(col):
+        return col.strip().strip('"').lower().replace(' ', '_')
+    
+    # Parse prompts
+    example_prompts = []
+    branded_count = 0
+    generic_count = 0
+    
+    # Brand keywords to detect branded prompts
+    brand_keywords = ['buick', 'enclave', 'envista', 'encore', 'envision']
+    
+    for row in reader:
+        row_normalized = {normalize_col(k): v.strip().strip('"') for k, v in row.items()}
+        
+        prompt_text = row_normalized.get('prompt', '')
+        if not prompt_text:
+            continue
+        
+        topic = row_normalized.get('topic', '')
+        origin = row_normalized.get('origin', 'human')
+        category_from_csv = row_normalized.get('category', '')
+        
+        # Determine if branded or generic
+        prompt_lower = prompt_text.lower()
+        is_branded = any(kw in prompt_lower for kw in brand_keywords)
+        prompt_category = 'branded' if is_branded else 'generic'
+        
+        if is_branded:
+            branded_count += 1
+        else:
+            generic_count += 1
+        
+        example_prompts.append({
+            'prompt': prompt_text,
+            'topic': topic,
+            'category': prompt_category,
+            'origin': origin,
+            'csv_category': category_from_csv,  # Original category from CSV
+        })
+    
+    if not example_prompts:
+        raise HTTPException(status_code=400, detail="No valid prompts found in CSV")
+    
+    # Store in project (merge with existing)
+    existing = project.example_prompts or []
+    
+    # Deduplicate by prompt text
+    existing_texts = {p.get('prompt', '').lower() for p in existing}
+    new_prompts = [p for p in example_prompts if p['prompt'].lower() not in existing_texts]
+    
+    project.example_prompts = existing + new_prompts
+    await db.commit()
+    
+    logger.info(
+        "Imported example prompts",
+        project_id=str(project_id),
+        total=len(example_prompts),
+        new=len(new_prompts),
+        branded=branded_count,
+        generic=generic_count,
+    )
+    
+    return {
+        "status": "success",
+        "prompts_imported": len(new_prompts),
+        "prompts_skipped": len(example_prompts) - len(new_prompts),
+        "total_examples": len(project.example_prompts),
+        "branded_count": branded_count,
+        "generic_count": generic_count,
+        "message": f"Imported {len(new_prompts)} new example prompts. {branded_count} branded, {generic_count} generic.",
+    }
+
+
+@router.get("/{project_id}/example-prompts", response_model=dict)
+async def get_example_prompts(
+    project_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all example prompts for a project."""
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    examples = project.example_prompts or []
+    
+    # Count by category
+    branded = len([p for p in examples if p.get('category') == 'branded'])
+    generic = len([p for p in examples if p.get('category') == 'generic'])
+    
+    # Get unique topics
+    topics = list(set(p.get('topic', '') for p in examples if p.get('topic')))
+    
+    return {
+        "prompts": examples,
+        "total": len(examples),
+        "branded_count": branded,
+        "generic_count": generic,
+        "topics": sorted(topics),
+    }
+
+
 @router.post("/{project_id}/match", response_model=dict)
 async def run_matching(
     project_id: UUID,

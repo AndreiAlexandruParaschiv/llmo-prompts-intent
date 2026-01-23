@@ -28,6 +28,13 @@ class Project(Base, UUIDMixin, TimestampMixin):
     #   "respect_robots": true
     # }
     
+    # Human prompt examples for few-shot learning when generating candidate prompts
+    example_prompts = Column(JSONB, default=list)
+    # Example: [
+    #   {"topic": "enclave", "prompt": "Is Buick Enclave a good car to buy?", "category": "branded"},
+    #   {"topic": "suvs", "prompt": "What's the best mid-size SUV?", "category": "generic"},
+    # ]
+    
     # Owner user ID (optional for MVP)
     owner_id = Column(UUID(as_uuid=True), nullable=True)
     

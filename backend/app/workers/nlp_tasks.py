@@ -144,18 +144,21 @@ def generate_page_embeddings_batch(page_ids: List[str]):
 
 
 @celery_app.task(name="generate_candidate_prompts_batch", bind=True)
-def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int = 5):
+def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int = 5, example_prompts: list | None = None):
     """
     Generate candidate prompts for a batch of pages using Azure OpenAI.
     
     This generates casual, human-like prompts that would make LLMs cite each page.
     Results are cached in the page's candidate_prompts JSONB field.
+    
+    Args:
+        example_prompts: Optional list of human prompt examples for few-shot learning
     """
     from app.models.page import Page
     from app.services.azure_openai import azure_openai_service
     import time
     
-    logger.info("Generating candidate prompts batch", count=len(page_ids), num_prompts=num_prompts)
+    logger.info("Generating candidate prompts batch", count=len(page_ids), num_prompts=num_prompts, has_examples=bool(example_prompts))
     
     if not azure_openai_service.enabled:
         logger.error("Azure OpenAI service not enabled")
@@ -173,13 +176,14 @@ def generate_candidate_prompts_batch(self, page_ids: List[str], num_prompts: int
         
         for i, page in enumerate(pages):
             try:
-                # Generate candidate prompts (include SEO data if available)
+                # Generate candidate prompts (include SEO data and examples if available)
                 result = azure_openai_service.generate_candidate_prompts(
                     page_url=page.url,
                     page_title=page.title or "",
                     page_content=page.content or "",
                     meta_description=page.meta_description,
                     seo_data=page.seo_data,  # Pass SEO keyword data if available
+                    example_prompts=example_prompts,  # Pass human examples for few-shot learning
                     num_prompts=num_prompts,
                 )
                 

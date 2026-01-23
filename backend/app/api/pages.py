@@ -710,7 +710,7 @@ async def export_candidate_prompts_csv(
 
 
 @router.post("/generate-candidate-prompts-batch", response_model=dict)
-async def generate_candidate_prompts_batch(
+async def generate_candidate_prompts_batch_endpoint(
     project_id: UUID = Query(..., description="Project ID to generate prompts for"),
     regenerate: bool = Query(False, description="Regenerate prompts even if cached"),
     num_prompts: int = Query(5, ge=1, le=10, description="Number of prompts per page"),
@@ -722,8 +722,17 @@ async def generate_candidate_prompts_batch(
     
     This is useful for populating prompts before exporting to CSV.
     Returns immediately with task status - generation happens in background.
+    
+    If the project has human prompt examples imported, they will be used
+    as few-shot learning examples to generate more natural prompts.
     """
     from app.workers.nlp_tasks import generate_candidate_prompts_batch
+    from app.models.project import Project
+    
+    # Get the project to fetch example prompts
+    project = await db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     
     # Get pages that need prompts
     query = select(Page.id).where(Page.project_id == project_id)
@@ -744,8 +753,15 @@ async def generate_candidate_prompts_batch(
             "pages_queued": 0,
         }
     
-    # Start background task
-    task = generate_candidate_prompts_batch.delay(page_ids, num_prompts)
+    # Get human example prompts from project (filter to origin=human)
+    example_prompts = None
+    if project.example_prompts:
+        example_prompts = [p for p in project.example_prompts if p.get('origin') == 'human']
+        if not example_prompts:
+            example_prompts = None  # No human examples available
+    
+    # Start background task with example prompts
+    task = generate_candidate_prompts_batch.delay(page_ids, num_prompts, example_prompts)
     
     # Store task_id in Redis for cancellation
     from app.core.celery_app import celery_app

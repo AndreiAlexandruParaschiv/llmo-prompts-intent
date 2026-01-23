@@ -134,6 +134,9 @@ function OverviewTab({ project, stats }: { project: Project; stats?: ProjectStat
 
   // File input ref for CSV crawl
   const csvCrawlInputRef = useRef<HTMLInputElement>(null)
+  
+  // File input ref for example prompts import
+  const examplePromptsInputRef = useRef<HTMLInputElement>(null)
 
   // Crawl from CSV mutation (with SEO keyword data)
   const csvCrawlMutation = useMutation({
@@ -157,6 +160,31 @@ function OverviewTab({ project, stats }: { project: Project; stats?: ProjectStat
     const file = e.target.files?.[0]
     if (file) {
       csvCrawlMutation.mutate(file)
+    }
+    e.target.value = ''
+  }
+
+  // Import example prompts mutation (for few-shot learning)
+  const importExamplesMutation = useMutation({
+    mutationFn: (file: File) => projectsApi.importExamplePrompts(project.id, file),
+    onSuccess: (response) => {
+      const data = response.data
+      toast({ 
+        title: 'Example Prompts Imported', 
+        description: data.message
+      })
+      queryClient.invalidateQueries({ queryKey: ['project', project.id] })
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to import examples', description: error.message, variant: 'destructive' })
+    },
+  })
+
+  // Handle example prompts file selection
+  const handleExamplePromptsSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      importExamplesMutation.mutate(file)
     }
     e.target.value = ''
   }
@@ -259,6 +287,48 @@ function OverviewTab({ project, stats }: { project: Project; stats?: ProjectStat
       </div>
 
       {/* Workflow Steps */}
+      {/* Optional: Import Example Prompts for better AI generation */}
+      <Card className="border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/10 dark:to-purple-900/10">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-slate-900 dark:text-white">Human Prompt Examples</h4>
+                <p className="text-sm text-slate-500">
+                  Import real human prompts to improve AI-generated candidate prompts
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Hidden file input */}
+              <input
+                type="file"
+                ref={examplePromptsInputRef}
+                onChange={handleExamplePromptsSelect}
+                accept=".csv"
+                className="hidden"
+              />
+              <Button
+                variant="outline"
+                onClick={() => examplePromptsInputRef.current?.click()}
+                disabled={importExamplesMutation.isPending}
+                className="border-violet-300 hover:bg-violet-100 dark:border-violet-700 dark:hover:bg-violet-900/30"
+              >
+                {importExamplesMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4 mr-2" />
+                )}
+                Import Examples
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-slate-200 dark:border-slate-800">
         <CardHeader>
           <CardTitle>Analysis Workflow</CardTitle>
