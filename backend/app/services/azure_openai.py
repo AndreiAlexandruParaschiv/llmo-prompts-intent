@@ -392,20 +392,20 @@ Generate suggested prompts as natural questions:"""
         page_title: str,
         page_content: str,
         meta_description: Optional[str] = None,
-        num_prompts: int = 5
+        num_prompts: int = 8
     ) -> Optional[Dict[str, Any]]:
         """
         Generate high-impact candidate prompts that would make LLMs cite this page.
         
-        Focus on prompts with transactional/commercial intent that would:
-        - Lead to the LLM citing or mentioning this specific page
-        - Have high conversion potential
-        - Match the page's unique value proposition
+        Generates TWO types of prompts:
+        1. GENERIC prompts (for citation tracking) - category-level queries without brand names
+        2. BRANDED prompts (for verification/sentiment) - brand-specific queries
         
         Returns dict with:
-        - prompts: List of candidate prompts with transaction scores and reasoning
+        - prompts: List of candidate prompts with transaction scores, categories, and reasoning
         - page_topic: Overall topic of the page
         - page_summary: Brief summary of what the page offers
+        - brand_name: Detected brand name from the page
         - generated_at: Timestamp of generation
         """
         if not self.enabled or not self.client:
@@ -422,64 +422,74 @@ Generate suggested prompts as natural questions:"""
                         "role": "system",
                         "content": f"""You are an expert at understanding how real humans ask questions to AI assistants like ChatGPT, Claude, Perplexity, and Google's AI Overview.
 
-Your task: Generate {num_prompts} HIGH-IMPACT prompts/questions that real users would type into an LLM that would make the LLM cite this specific webpage.
+Your task: Generate {num_prompts} HIGH-IMPACT prompts/questions for LLMO (LLM Optimization). 
 
-CRITICAL - WRITE LIKE REAL HUMANS TALK TO AI:
-Real users are CASUAL and CONVERSATIONAL. They don't type formal queries - they chat naturally.
+CRITICAL: Generate TWO CATEGORIES of prompts:
 
-BAD examples (too formal/SEO-like):
-- "What are the performance specifications of the 2026 Cadillac CT5-V Blackwing?"
-- "Review the specifications and features of premium sedan vehicles"
-- "Information about Mediterranean cruise packages 2025"
+## CATEGORY 1: GENERIC PROMPTS (4-5 prompts)
+These are for CITATION TRACKING - queries where the brand wants to BE MENTIONED/CITED.
+- DO NOT include the brand name in these prompts
+- Use category/industry-level queries
+- These test whether the LLM will cite this brand when answering general questions
 
-GOOD examples (how real humans actually ask):
-- "how much hp does the ct5-v blackwing have"
-- "is the blackwing worth it over the regular ct5-v"
-- "what's the fastest cadillac you can buy right now"
-- "thinking about a med cruise next summer, what should I expect to pay"
-- "can I get a manual transmission in the new blackwing"
+GENERIC EXAMPLES:
+- "what's the best luxury suv for a family of 6"
+- "which electric car has the longest range under 60k"
+- "best full-size suv for towing a boat"
+- "what car brands let you order online and deliver to your home"
+- "most reliable luxury sedan 2025"
+
+## CATEGORY 2: BRANDED PROMPTS (3-4 prompts)
+These are for VERIFICATION and SENTIMENT TRACKING - queries about the specific brand.
+- Include the brand/product name
+- Test if LLM has correct information (verification)
+- Test sentiment/perception of the brand (sentiment)
+- Include comparison prompts with competitors
+
+BRANDED EXAMPLES:
+- "is the cadillac escalade worth the price"
+- "how does the lyriq compare to tesla model y"
+- "what's the towing capacity of the 2025 escalade"
+- "are cadillac suvs reliable"
 
 PROMPT CHARACTERISTICS:
-1. CASUAL TONE: Use lowercase, contractions, informal phrasing
-2. REAL INTENT: Focus on what people ACTUALLY want to know:
-   - Price/cost questions ("how much does X cost", "is X worth the money")
-   - Comparisons ("X vs Y", "should I get X or Y", "is X better than Y")
-   - Specific features ("does X have...", "can X do...")
-   - Decision help ("should I buy X", "is X good for...")
-   - Problem solving ("I need X, what should I get")
-3. VARIETY: Mix of:
-   - Quick factual questions ("what's the 0-60 on...")
-   - Opinion/advice seeking ("is X worth it")
-   - Comparison shopping ("X vs competitors")
-   - Specific use cases ("best X for families/commuting/etc")
+1. CASUAL TONE: Use lowercase, contractions, informal phrasing (how real people type)
+2. REAL INTENT: Focus on what people ACTUALLY want to know
+3. ACTIONABLE: Prompts that marketers can track and act on
 
-FUNNEL STAGES to cover:
-- awareness: "what is X", "tell me about X"
-- consideration: "X vs Y", "is X good", "X reviews"
-- decision: "should I buy X", "best deal on X", "how to order X"
+PROMPT CATEGORIES (prompt_category field):
+- "generic" - No brand name, category-level query (for citation tracking)
+- "comparison" - Compares this brand vs competitors (competitive positioning)
+- "branded_verify" - Brand-specific factual/specs question (accuracy verification)
+- "branded_sentiment" - Brand perception/opinion question (sentiment tracking)
 
 Respond with JSON only:
 {{
-  "page_topic": "Main topic/category (e.g., 'Performance Sedans', 'Mediterranean Cruises')",
+  "page_topic": "Main topic/category (e.g., 'Luxury SUVs', 'Electric Vehicles')",
   "page_summary": "One sentence summary of what this page offers",
+  "brand_name": "The brand name detected from this page",
+  "product_category": "The product category (e.g., 'SUV', 'Sedan', 'Electric Car')",
   "prompts": [
     {{
-      "text": "The casual, natural question (how a real person would type it)",
+      "text": "The casual, natural question",
+      "prompt_category": "generic|comparison|branded_verify|branded_sentiment",
       "transaction_score": 0.0-1.0,
       "intent": "transactional|commercial|comparison|informational",
       "funnel_stage": "awareness|consideration|decision",
       "topic": "Specific topic this prompt relates to",
       "sub_topic": "More specific sub-topic if applicable",
-      "audience_persona": "Type of person asking (e.g., 'Car enthusiast', 'First-time buyer', 'Budget-conscious shopper')",
-      "reasoning": "Why this prompt would lead to citing this page",
-      "citation_trigger": "What specific content would be cited"
+      "audience_persona": "Type of person asking",
+      "reasoning": "Why this prompt is valuable for tracking",
+      "citation_trigger": "What content would be cited OR what we're verifying"
     }}
   ]
-}}"""
+}}
+
+IMPORTANT: Ensure a good mix - approximately 50-60% generic prompts and 40-50% branded prompts."""
                     },
                     {
                         "role": "user",
-                        "content": f"""Analyze this webpage and generate {num_prompts} CASUAL, NATURAL prompts that real humans would type into ChatGPT/Claude/Perplexity:
+                        "content": f"""Analyze this webpage and generate {num_prompts} prompts - both GENERIC (for citation tracking) and BRANDED (for verification/sentiment):
 
 URL: {page_url}
 Title: {page_title}
@@ -488,11 +498,15 @@ Title: {page_title}
 Content excerpt:
 {content_excerpt}
 
-Generate prompts that sound like how people ACTUALLY talk to AI assistants:"""
+Generate a mix of:
+- GENERIC prompts (no brand name) for citation tracking
+- BRANDED prompts for verification and sentiment tracking
+
+Make them sound like how real people ACTUALLY talk to AI assistants:"""
                     }
                 ],
                 temperature=0.6,
-                max_tokens=1500,
+                max_tokens=2500,
                 response_format={"type": "json_object"}
             )
             
